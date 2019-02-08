@@ -69,7 +69,7 @@ $(document).ready(function() {
         if ("key_q" in redisModel) {
           onRedisKeyUpdate[redisModel.key_q] = (key_q, val) => {
             const result = updateRobotQ(robots[key].bodies, val[0]);
-            updateInteraction(robots[key].bodies);
+            updateInteraction(key, robots[key].bodies);
             return result;
           }
         }
@@ -83,12 +83,14 @@ $(document).ready(function() {
         const redisObj = JSON.parse(val);
         if ("key_pos" in redisObj) {
           onRedisKeyUpdate[redisObj.key_pos] = (key_pos, val) => {
-            return updateObjectPos(key, val[0]);
+            const result = updateObjectPos(key, val[0]);
+            updateInteraction(key, objects[key]);
+            return result
           }
         }
         if ("key_ori" in redisObj) {
           onRedisKeyUpdate[redisObj.key_ori] = (key_ori, val) => {
-            return updateObjectOri(key, val);
+            return updateObjectOri(key, val[0]);
           }
         }
         addObjectToScene(key, redisObj.graphics);
@@ -166,17 +168,38 @@ $(document).ready(function() {
     return keys;
   }
 
-  function updateInteraction(bodies) {
+  function updateInteraction(key, bodies) {
     // Update body position in mouse drag line
-    if (!lineMouseDrag) return;
+    if (!lineMouseDrag || key !== interaction.key_object) return;
 
     let posClick = new THREE.Vector3();
     posClick.fromArray(interaction.pos_click_in_link);
-    bodies[interaction.idx_link].localToWorld(posClick);
+    if (bodies.constructor === Array) {
+      bodies[interaction.idx_link].localToWorld(posClick);
+    } else {
+      bodies.localToWorld(posClick);
+    }
     lineMouseDrag.array[0] = posClick.x;
     lineMouseDrag.array[1] = posClick.y;
     lineMouseDrag.array[2] = posClick.z;
     lineMouseDrag.needsUpdate = true;
+  }
+
+  function findIntersectedObject(intersect, objectMap, isEqual) {
+    let object = intersect.object;
+    while (object.parent) {
+      for (let key in objectMap) {
+        if (!isEqual) {
+          if (objectMap[key] != object) continue;
+          return [key, object];
+        }
+        if (isEqual(objectMap[key], object)) {
+          return [key, object];
+        }
+      }
+      object = object.parent;
+    }
+    return ["", null];
   }
 
   function handleInteraction(event) {
@@ -194,22 +217,23 @@ $(document).ready(function() {
 
     // Find intersected body
     const intersect = intersects[0];
-    for (let key in robots) {
-      let object = intersect.object;
-      while (object.parent) {
-        if (robots[key].bodies.includes(object)) {
-          let posClickInBody = intersect.point.clone();
-          object.worldToLocal(posClickInBody);
-
-          interaction.key_object = key;
-          interaction.idx_link = robots[key].bodies.indexOf(object);
-          interaction.pos_click_in_link = posClickInBody.toArray();
-          interaction.modifier_keys = getModifierKeys(event);
-          break;
-        }
-        object = object.parent;
-      }
+    let key_val = findIntersectedObject(intersect, robots,
+                                        (robot, object) => robot.bodies.includes(object));
+    if (!key_val[0]) {
+      key_val = findIntersectedObject(intersect, objects)
     }
+    if (!key_val[0]) return;
+
+    const key_object = key_val[0];
+    const object     = key_val[1];
+    interaction.key_object = key_object;
+    if (key_object in robots) {
+      interaction.idx_link = robots[key_object].bodies.indexOf(object);
+    }
+    let posClickInBody = intersect.point.clone();
+    object.worldToLocal(posClickInBody);
+    interaction.pos_click_in_link = posClickInBody.toArray();
+    interaction.modifier_keys = getModifierKeys(event);
 
     // Create mouse line
     let lineGeometry = new THREE.BufferGeometry();
@@ -310,6 +334,7 @@ $(document).ready(function() {
       redis.sendAjax("SET", KEY_INTERACTION, interaction);
       redis.updateForm(KEY_INTERACTION, JSON.stringify(interaction));
     }
+    redis.sendAjax("SET", KEY_INTERACTION, interaction);
 
     controls = new THREE.OrbitControls(camera, renderer.domElement);
     controls.enableKeys = false;
@@ -388,7 +413,7 @@ $(document).ready(function() {
   }
 
   function updateObjectOri(key, quat) {
-    objects[key].quaternion.set(quat.x, quat.y, quat.z, quat.w);
+    objects[key].quaternion.set(quat[0], quat[1], quat[2], quat[3]);
   }
 
   function addRobotToScene(key, ab) {
