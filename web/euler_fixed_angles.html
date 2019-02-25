@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="utf-8" />
+	<title>Euler Angles vs. Fixed Angles</title>
+	<link rel="stylesheet" href="css/main.css" />
+	<script src="js/jquery-3.3.1.min.js"></script>
+	<script src="js/three-100.min.js"></script>
+	<script src="js/OrbitControls.js"></script>
+	<script src="js/THREE.MeshLine.js"></script>
+	<script src="js/main.js"></script>
+	<script type="module" src="js/euler_fixed_angles.js"></script>
+</head>
+
+<body>
+	<div class="col-split">
+		<div id="sidebar">
+			<div id="sidebar-redis">
+				<div id="sidebar-keys"></div>
+				<div id="sidebar-description">
+					<p>
+						This is a demonstration showing the equivalence between Euler
+						angles and fixed angles using your implementation of
+						<i>rotations.py</i>. ZYX Euler angles are depicted on the left, and
+						fixed angles on the right. The final rotated frames are
+						marked with white dots.  The red, green, and blue arrows
+						indicate the intermediate axes of rotation. Note that these
+						directions change for Euler angles, but stay fixed for fixed
+						angles.
+					</p>
+
+					<p>
+						Key:
+						<ul>
+							<li><b>matrix</b> - input a desired rotation matrix</li>
+							<li><b>xyz_fixed_angles</b> - input desired XYZ fixed angles</li>
+							<li><b>zyx_euler_angles</b> - input desired ZYX Euler angles</li>
+						</ul>
+					</p>
+				</div>
+			</div>
+		</div>
+		<div id="content">
+			<div class="row-split">
+				<div id="threejs"></div>
+			</div>
+		</div>
+	</div>
+</body>
+
+</html>
