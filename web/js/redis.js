@@ -57,7 +57,8 @@ export function addForm(key, val, set, del, verbose, callback) {
   $form.on("submit", (e) => {
     e.preventDefault();
 
-    sendAjax("SET", key, getMatrix($form), verbose);
+    let val = getMatrix($form);
+    sendAjax("SET", key, val, verbose);
 
     if (callback) {
       callback(key, val);
