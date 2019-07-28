@@ -64,93 +64,192 @@ $(document).ready(function() {
   };
   let lineMouseDrag = null;
 
-  let onRedisKeyUpdate = {};
+  let redisUpdateCallbacks = {};
   let robots = {};
   let objects = {};
   let trajectories = {};
+  let cameras = {};
 
-  init_graphics();
+  initGraphics();
 
-  function handleMessage(e) {
+  function handleMessage(buffer) {
+    const keys = Redis.parseMessage(buffer);
 
-    var msg = JSON.parse(e.data);
-    var updateKeys = msg["update"];
-    var delKeys = msg["delete"];
+    // Initialize webapp args
+    if (!parseArgs(keys.toUpdate)) return;
 
-    // Look for webapp args first
-    if (args === null) {
-      updateKeys.forEach((m) => {
-        if (m[0] != KEY_ARGS) return;
-        args = JSON.parse(m[1]);
-      });
-      if (args === null) return;
-    }
+    // Parse models
+    parseModels(keys.toUpdate);
 
-    // Look for updated objects
-    updateKeys.forEach(function(keyVal) {
-      let key = keyVal[0];
-      let val = keyVal[1];
-      if (key.startsWith(args.key_models_prefix)) {
-        const redisModel = JSON.parse(val);
-        if ("key_q" in redisModel) {
-          onRedisKeyUpdate[redisModel.key_q] = (key_q, val) => {
-            const result = updateRobotQ(robots[key].bodies, val[0]);
-            updateInteraction(key, robots[key].bodies);
-            return result;
-          }
-        }
-        if ("key_traj" in redisModel) {
-          onRedisKeyUpdate[redisModel.key_traj] = (key_traj, val) => {
-            return updateTrajectoryTrail(key, val[0]);
-          }
-        }
-        addRobotToScene(key, redisModel.model);
-      } else if (key.startsWith(args.key_objects_prefix)) {
-        const redisObj = JSON.parse(val);
-        if ("key_pos" in redisObj) {
-          onRedisKeyUpdate[redisObj.key_pos] = (key_pos, val) => {
-            const result = updateObjectPos(key, val[0]);
-            updateInteraction(key, objects[key]);
-            return result
-          }
-        }
-        if ("key_ori" in redisObj) {
-          onRedisKeyUpdate[redisObj.key_ori] = (key_ori, val) => {
-            return updateObjectOri(key, val[0]);
-          }
-        }
-        addObjectToScene(key, redisObj.graphics);
-      }
+    // Parse remaining update keys
+    let renderFrame = parseUpdateKeys(keys.toUpdate);
 
-      // Update html
-      if (!redis.formExists(key)) {
-        redis.updateForm(key, val, true, true, true);
-      }
-    });
+    // Parse delete keys
+    renderFrame = parseDeleteKeys(keys.toDelete) || renderFrame;
 
-    let renderFrame = false;
-
-    // Call update callbacks
-    updateKeys.forEach(function(keyVal) {
-      let key = keyVal[0];
-      let val = keyVal[1];
-      if (key in onRedisKeyUpdate) {
-        renderFrame = onRedisKeyUpdate[key](key, val) || renderFrame;
-      }
-
-      // Update html
-      redis.updateForm(key, val, true, true, true);
-    });
-
-    delKeys.forEach(function(key) {
-      redis.deleteForm(key);
-    })
-
+    // Render
     if (renderFrame) {
       renderer.render(scene, camera);
     }
-
   };
+
+  function registerRedisUpdateCallback(key, keyComponent, component, updateCallback) {
+    if (!(key in redisUpdateCallbacks)) {
+      redisUpdateCallbacks[key] = [];
+    }
+    redisUpdateCallbacks[key][keyComponent] = (val) => {
+      return updateCallback(component, val);
+    };
+  }
+
+  function unregisterRedisUpdateCallback(keyComponent) {
+    for (const key in redisUpdateCallbacks) {
+      if (!(keyComponent in redisUpdateCallbacks[key])) continue;
+      redisUpdateCallbacks[key].delete(keyComponent);
+    }
+  }
+
+  function parseArgs(keyVals) {
+    // Skip if args already parsed
+    if (args !== null) return true;
+
+    // Quit if args unavailable
+    if (!(KEY_ARGS in keyVals)) return false;
+
+    // Parse args
+    args = JSON.parse(keyVals[KEY_ARGS]);
+    return true;
+  }
+
+  function parseModels(keyVals) {
+    for (const key in keyVals) {
+      let val = keyVals[key];
+
+      // Skip binary objects
+      if (typeof(val) === "object") continue;
+
+      // Try parsing all model types
+      if (!parseCameraModel(key, val) &&
+          !parseObjectModel(key, val) &&
+          !parseRobotModel(key, val) &&
+          !parseTrajectoryModel(key, val)) continue;
+
+      // Update html
+      Redis.updateForm(key, val, true, true, true);
+    }
+  }
+
+  function parseRobotModel(key, val) {
+    if (!key.startsWith(args["key_robots_prefix"])) return false;
+
+    // Parse robot model
+    const model = JSON.parse(val);
+    addComponentToScene(Robot, robots, key, model);
+    registerRedisUpdateCallback(model["key_q"], key, robots[key], (robot, val) => {
+      const renderFrame = Robot.updateQ(robot, val);
+      updateInteraction(key, object);
+      return renderFrame;
+    });
+    return true;
+  }
+
+  function parseObjectModel(key, val) {
+    if (!key.startsWith(args["key_objects_prefix"])) return false;
+
+    const model = JSON.parse(val);
+    addComponentToScene(GraphicsObject, objects, key, model);
+    registerRedisUpdateCallback(model["key_pos"], key, objects[key], (object, val) => {
+      const renderFrame = GraphicsObject.updatePosition(object, val);
+      updateInteraction(key, object);
+      return renderFrame;
+    });
+    registerRedisUpdateCallback(model["key_ori"], key, objects[key], GraphicsObject.updateOrientation);
+    return true;
+  }
+
+  function parseTrajectoryModel(key, val) {
+    if (!key.startsWith(args["key_trajectories_prefix"])) return false;
+
+    // Parse object model
+    const model = JSON.parse(val);
+    addComponentToScene(Trajectory, trajectories, key, model);
+    registerRedisUpdateCallback(model["key_pos"], key, trajectories[key], Trajectory.appendPosition);
+    return true;
+  }
+
+  function parseCameraModel(key, val) {
+    if (!key.startsWith(args["key_cameras_prefix"])) return false;
+
+    // Parse object model
+    const model = JSON.parse(val);
+    addComponentToScene(Camera, cameras, key, model);
+    registerRedisUpdateCallback(model["key_pos"], key, cameras[key], Camera.updatePosition);
+    registerRedisUpdateCallback(model["key_ori"], key, cameras[key], Camera.updateOrientation);
+    registerRedisUpdateCallback(model["key_intrinsic"], key, cameras[key], Camera.updateIntrinsic);
+    registerRedisUpdateCallback(model["key_depth_image"], key, cameras[key], Camera.updateDepthImage);
+    return true;
+  }
+
+  function addComponentToScene(Component, components, key, model) {
+    let component = Component.create(model, (component) => {
+      scene.add(component);
+      renderer.render(scene, camera);
+    });
+
+    // Delete old component
+    if (key in components) {
+      scene.remove(components[key]);
+    }
+    components[key] = component;
+  }
+
+  function parseUpdateKeys(keyVals) {
+    let renderFrame = false;
+    for (const key in keyVals) {
+      let val = keyVals[key];
+
+      // Parse matrices (without converting to float)
+      if (Redis.isNumeric(val)) {
+        val = Redis.stringToMatrix(val, false);
+      }
+
+      // Call update event
+      if (key in redisUpdateCallbacks) {
+        for (const keyComponent in redisUpdateCallbacks[key]) {
+          const updateCallback = redisUpdateCallbacks[key][keyComponent];
+          renderFrame = updateCallback(val) || renderFrame;
+        }
+      }
+
+      // Update html
+      if (typeof(val) === "object" && val.constructor === ArrayBuffer) {
+        Redis.updateForm(key, null, false, true, false);
+      } else {
+        Redis.updateForm(key, val, true, true, true);
+      }
+    }
+    return renderFrame;
+  }
+
+  function parseDeleteKeys(keys) {
+    let renderFrame = false;
+
+    keys.forEach((key) => {
+      if (key in robots) {
+        scene.remove(robots[key]);
+        robots.delete(key);
+        unregisterRedisUpdateCallback(key);
+        renderFrame = true;
+      } else if (key in objects) {
+        scene.remove(objects[key]);
+        objects.delete(key);
+        unregisterRedisUpdateCallback(key);
+        renderFrame = true;
+      }
+      Redis.deleteForm(key);
+    });
+    return renderFrame;
+  }
 
   function getPosMouse(event) {
     const $canvas = $(renderer.domElement);
@@ -174,7 +273,7 @@ $(document).ready(function() {
 
     // Find all robot meshes
     for (let key in robots) {
-      findMeshes(robots[key].base);
+      findMeshes(robots[key]);
     }
 
     // Find all object meshes
@@ -196,13 +295,15 @@ $(document).ready(function() {
 
   function updateInteraction(key, bodies) {
     // Update body position in mouse drag line
-    if (!lineMouseDrag || key !== interaction.key_object) return;
+    if (!lineMouseDrag || key !== interaction["key_object"]) return;
 
     let posClick = new THREE.Vector3();
-    posClick.fromArray(interaction.pos_click_in_link);
-    if (bodies.constructor === Array) {
-      bodies[interaction.idx_link].localToWorld(posClick);
+    posClick.fromArray(interaction["pos_click_in_link"]);
+    if ("redisgl" in bodies) {
+      // Robot
+      bodies[interaction["idx_link"]].localToWorld(posClick);
     } else {
+      // Object
       bodies.localToWorld(posClick);
     }
     lineMouseDrag.array[0] = posClick.x;
@@ -243,18 +344,18 @@ $(document).ready(function() {
 
     // Find intersected body
     const intersect = intersects[0];
-    let key_val = findIntersectedObject(intersect, robots,
-                                        (robot, object) => robot.bodies.includes(object));
-    if (!key_val[0]) {
-      key_val = findIntersectedObject(intersect, objects)
+    let keyVal = findIntersectedObject(intersect, robots,
+                                        (robot, object) => robot.redisgl.bodies.includes(object));
+    if (!keyVal[0]) {
+      keyVal = findIntersectedObject(intersect, objects)
     }
-    if (!key_val[0]) return;
+    if (!keyVal[0]) return;
 
-    const key_object = key_val[0];
-    const object     = key_val[1];
+    const key_object = keyVal[0];
+    const object     = keyVal[1];
     interaction.key_object = key_object;
     if (key_object in robots) {
-      interaction.idx_link = robots[key_object].bodies.indexOf(object);
+      interaction.idx_link = robots[key_object].redisgl.bodies.indexOf(object);
     }
     let posClickInBody = intersect.point.clone();
     object.worldToLocal(posClickInBody);
@@ -298,8 +399,8 @@ $(document).ready(function() {
 
       // Send Redis keys
       interaction.pos_mouse_in_world = posMouse.toArray();
-      redis.sendAjax("SET", KEY_INTERACTION, interaction);
-      redis.updateForm(KEY_INTERACTION, JSON.stringify(interaction));
+      Redis.sendAjax("SET", KEY_INTERACTION, interaction);
+      Redis.updateForm(KEY_INTERACTION, JSON.stringify(interaction));
 
       renderer.render(scene, camera);
     };
@@ -313,15 +414,15 @@ $(document).ready(function() {
       interaction.pos_click_in_link = [0,0,0];
       interaction.pos_mouse_in_world = [0,0,0];
       interaction.modifier_keys = [];
-      redis.sendAjax("SET", KEY_INTERACTION, interaction);
-      redis.updateForm(KEY_INTERACTION, JSON.stringify(interaction));
+      Redis.sendAjax("SET", KEY_INTERACTION, interaction);
+      Redis.updateForm(KEY_INTERACTION, JSON.stringify(interaction));
       renderer.render(scene, camera);
     }
     $(document).on("mousemove", mouseMove);
     $(document).on("mouseup", mouseUp);
   }
 
-  function init_graphics() {
+  function initGraphics() {
 
     var width = window.innerWidth - $("#sidebar").width();
     var height = window.innerHeight - $("#plotly").height() - 4;
@@ -351,26 +452,26 @@ $(document).ready(function() {
     function keyDown(e) {
       if (e.key != interaction.key_down) {
         interaction.key_down = e.key;
-        redis.sendAjax("SET", KEY_INTERACTION, interaction);
-        redis.updateForm(KEY_INTERACTION, JSON.stringify(interaction));
+        Redis.sendAjax("SET", KEY_INTERACTION, interaction);
+        Redis.updateForm(KEY_INTERACTION, JSON.stringify(interaction));
       }
     }
     function keyUp() {
       interaction.key_down = "";
-      redis.sendAjax("SET", KEY_INTERACTION, interaction);
-      redis.updateForm(KEY_INTERACTION, JSON.stringify(interaction));
+      Redis.sendAjax("SET", KEY_INTERACTION, interaction);
+      Redis.updateForm(KEY_INTERACTION, JSON.stringify(interaction));
     }
-    redis.sendAjax("SET", KEY_INTERACTION, interaction);
+    Redis.sendAjax("SET", KEY_INTERACTION, interaction);
 
     controls = new THREE.OrbitControls(camera, renderer.domElement);
     controls.enableKeys = false;
     camera.updateProjectionMatrix();
-    redis.addForm(KEY_CAMERA_TARGET, [controls.target.toArray()], true, false, false, (key, val) => {
+    Redis.addForm(KEY_CAMERA_TARGET, [controls.target.toArray()], true, false, false, (key, val) => {
       controls.target.fromArray(val[0]);
       controls.update();
       renderer.render(scene, camera);
     });
-    redis.addForm(KEY_CAMERA_POS, [controls.object.position.toArray()], true, false, false, (key, val) => {
+    Redis.addForm(KEY_CAMERA_POS, [controls.object.position.toArray()], true, false, false, (key, val) => {
       console.log(val[0]);
       camera.position.fromArray(val[0]);
       camera.updateProjectionMatrix();
@@ -379,19 +480,22 @@ $(document).ready(function() {
     });
     controls.addEventListener("change", function() {
       renderer.render(scene, camera);
-      redis.updateForm(KEY_CAMERA_TARGET, [controls.target.toArray()]);
-      redis.updateForm(KEY_CAMERA_POS, [controls.object.position.toArray()]);
+      Redis.updateForm(KEY_CAMERA_TARGET, [controls.target.toArray()]);
+      Redis.updateForm(KEY_CAMERA_POS, [controls.object.position.toArray()]);
     });
 
-    // redis.addForm("trajectory_trail::reset", [[0]], true, false, false, (key, val) => {
-    //   reset_trajectory_trail();
-    //   renderer.render(scene, camera);
-    // });
+    Redis.addForm(KEY_TRAJ_RESET, null, true, false, false, (key, val) => {
+      console.log("Reset trajectory");
+      for (const key in trajectories) {
+        Trajectory.reset(trajectories[key]);
+      }
+      renderer.render(scene, camera);
+    });
 
     var grid = new THREE.GridHelper(1, 10);
     grid.rotation.x = Math.PI / 2;
     scene.add(grid);
-    scene.add(graphics.axes(AXIS_SIZE, AXIS_WIDTH));
+    scene.add(Graphics.axes(AXIS_SIZE, AXIS_WIDTH));
 
     var light = new THREE.AmbientLight(0xffffff, 0.4);
     scene.add(light);
@@ -407,216 +511,18 @@ $(document).ready(function() {
     renderer.render(scene, camera);
   }
 
-  function addObjectToScene(key, object) {
-
-    // Remove existing object
-    if (key in objects) {
-      scene.remove(objects[key]);
-    }
-
-    // Create object
-    let obj = new THREE.Object3D();
-
-    // Load graphics
-    let promises = [];
-    object.forEach((graphicsStruct) => {
-      graphics.parse(graphicsStruct, obj, promises);
-    });
-
-    // Add to objects map
-    objects[key] = obj;
-
-    // Render when graphics have finished loading
-    Promise.all(promises).then(() => {
-      scene.add(obj);
+  $(window).resize(() => {
+      const width = window.innerWidth - $("#sidebar").width();
+      const height = $("#threejs").height() - 4;
+      $("#plotly").height(window.innerHeight - $("#threejs").height());
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+      renderer.setSize(width, height);
       renderer.render(scene, camera);
-    });
-
-  }
-
-  function updateObjectPos(key, pos) {
-    objects[key].position.fromArray(pos);
-  }
-
-  function updateObjectOri(key, quat) {
-    objects[key].quaternion.set(quat[0], quat[1], quat[2], quat[3]);
-  }
-
-  function addRobotToScene(key, ab) {
-
-    // Remove existing robot
-    if (key in robots) {
-      return;
-      scene.remove(robots[key].base);
-    }
-
-    // Create base
-    let base = new THREE.Object3D();
-    base.quaternion.set(ab.quat.x, ab.quat.y, ab.quat.z, ab.quat.w);
-    base.position.fromArray(ab.pos);
-
-    // Load base graphics
-    let promises = [];
-    ab.graphics.forEach((graphicsStruct) => {
-      graphics.parse(graphicsStruct, base, promises);
-    });
-
-    // Iterate over rigid bodies
-    let bodies = [];
-    ab.rigid_bodies.forEach((rb) => {
-
-      // Set parent
-      let parent = rb.id_parent < 0 ? base : bodies[rb.id_parent];
-
-      // Create body
-      let body = new THREE.Object3D();
-      body.quaternion.set(rb.quat.x, rb.quat.y, rb.quat.z, rb.quat.w);
-      body.position.fromArray(rb.pos);
-
-      // Find joint axis
-      let axis;
-      switch (rb.joint.type[1].toLowerCase()) {
-        case "x":
-          axis = new THREE.Vector3(1, 0, 0);
-          break;
-        case "y":
-          axis = new THREE.Vector3(0, 1, 0);
-          break;
-        case "z":
-          axis = new THREE.Vector3(0, 0, 1);
-          break;
-      }
-
-      // Add custom fields to THREE.Object3D
-      body.spec = {
-        quaternion: body.quaternion.clone(),
-        position:   body.position.clone(),
-        joint_type: rb.joint.type[0],
-        joint_axis: axis
-      };
-
-      // Load body graphics
-      rb.graphics.forEach((graphicsStruct) => {
-        graphics.parse(graphicsStruct, body, promises);
-      });
-
-      // Add frame axes
-      body.add(graphics.axes(AXIS_SIZE, AXIS_WIDTH));
-
-      // Add body to parent
-      bodies.push(body);
-      parent.add(body);
-    });
-
-    // Add to robots map
-    robots[key] = {
-      base: base,
-      bodies: bodies
-    };
-
-    // Render when graphics have finished loading
-    Promise.all(promises).then(() => {
-      scene.add(base);
-      renderer.render(scene, camera);
-    });
-
-  }
-
-  function updateRobotQ(bodies, q) {
-
-    for (var i = 0; i < bodies.length; i++) {
-      // Update orientation in parent
-      let quat = new THREE.Quaternion(0, 0, 0, 1);
-      if (bodies[i].spec.joint_type.toLowerCase() == "r") {
-        quat.setFromAxisAngle(bodies[i].spec.joint_axis, q[i]);
-      }
-      quat.premultiply(bodies[i].spec.quaternion);
-
-      // Update position in parent
-      let pos = new THREE.Vector3(0, 0, 0);
-      if (bodies[i].spec.joint_type.toLowerCase() == "p") {
-        pos.copy(bodies[i].spec.joint_axis);
-        pos.multiplyScalar(q[i]);
-      }
-      pos.add(bodies[i].spec.position);
-
-      bodies[i].quaternion.copy(quat);
-      bodies[i].position.copy(pos);
-    }
-
-    return true;
-  }
-
-  function updateTrajectoryTrail(key, pos) {
-
-    if (!(key in trajectories)) {
-      trajectories[key] = {
-        idx: 0,
-        len: 0,
-        trails: []
-      };
-      let traj = trajectories[key];
-
-      let material = new THREE.LineBasicMaterial({ color: 0xffffff });
-      let positions = new Float32Array(3 * (LEN_TRAJECTORY_TRAIL + 1));
-      let buffer = new THREE.BufferAttribute(positions, 3);
-
-      for (var i = 0; i < 2; i++) {
-        let geometry = new THREE.BufferGeometry();
-        geometry.setDrawRange(0, 0);
-        geometry.addAttribute("position", buffer);
-        traj.trails.push(new THREE.Line(geometry, material));
-        scene.add(traj.trails[i]);
-      }
-
-    }
-
-    let traj = trajectories[key];
-
-    traj.trails[0].geometry.attributes.position.set(pos, 3 * traj.idx);
-    traj.idx++;
-    if (traj.idx > LEN_TRAJECTORY_TRAIL) {
-      traj.trails[0].geometry.attributes.position.set(pos, 0);
-      traj.idx = 1;
-    }
-
-    if (traj.len < LEN_TRAJECTORY_TRAIL) {
-      traj.len++;
-      traj.trails[0].geometry.setDrawRange(0, traj.len);
-      traj.trails[0].geometry.attributes.position.needsUpdate = true;
-    } else {
-      traj.trails[0].geometry.setDrawRange(0, traj.idx);
-      traj.trails[0].geometry.attributes.position.needsUpdate = true;
-      traj.trails[1].geometry.setDrawRange(traj.idx, LEN_TRAJECTORY_TRAIL - traj.idx + 1);
-      traj.trails[1].geometry.attributes.position.needsUpdate = true;
-    }
-
-  }
-
-  function resetTrajectoryTrail(key) {
-    if (!(key in trajectories)) return;
-
-    let traj = trajectories[key];
-    traj.idx = 0;
-    traj.len = 0;
-
-    traj.trails[0].geometry.setDrawRange(0, 0);
-    traj.trails[0].geometry.attributes.position.needsUpdate = true;
-    traj.trails[1].geometry.setDrawRange(0, 0);
-    traj.trails[1].geometry.attributes.position.needsUpdate = true;
-  }
-
-  // $(window).resize(function() {
-  //     var width = window.innerWidth - $("#sidebar").width();
-  //     var height = window.innerHeight - $("#plotly").height();
-  //     camera.aspect = width / height;
-  //     camera.updateProjectionMatrix();
-  //     renderer.setSize(width, height);
-  //     renderer.render(scene, camera);
-  // })
-  $("body").on("resize", ".ui-resizable", function() {
-    var width = window.innerWidth - $("#sidebar").width();
-    var height = $("#threejs").height() - 4;
+  });
+  $("body").on("resize", ".ui-resizable", () => {
+    const width = window.innerWidth - $("#sidebar").width();
+    const height = $("#threejs").height() - 4;
     $("#plotly").height(window.innerHeight - $("#threejs").height());
     camera.aspect = width / height;
     camera.updateProjectionMatrix();
@@ -636,7 +542,7 @@ $(document).ready(function() {
 
     // Get val
     var $form = $(this).closest("form");
-    var val = redis.matrixToString(redis.getMatrix($form));
+    var val = Redis.matrixToString(Redis.getMatrix($form));
 
     // Create temporary input to copy to clipboard
     var $temp = $("<input>");
@@ -653,7 +559,7 @@ $(document).ready(function() {
     // Get val
     var $form = $(this).closest("form");
     var key = $form.attr("data-key");
-    redis.sendAjax("DEL", key, "", true);
+    Redis.sendAjax("DEL", key, "", true);
 
   });
 

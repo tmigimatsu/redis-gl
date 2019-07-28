@@ -39,7 +39,7 @@ html, body {
 #sidebar-keys {
 	box-shadow: 0 2px 2px 0 rgba(0,0,0,0.1), 0 1px 5px 0 rgba(0,0,0,0.08), 0 3px 1px -2px rgba(0,0,0,0.16);
 	background: white;
-	overflow-y: scroll;
+	/* overflow-y: scroll; */
 }
 
 #content {
@@ -144,6 +144,11 @@ html, body {
 .val-string .val {
 	flex-grow: 1;
 	/* width: 400px; */
+}
+.val-binary {
+	font-style: italic;
+	color: #aaa;
+	margin-bottom: 5px;
 }
 
 /*

@@ -17,34 +17,34 @@ export function parse(graphicsStruct, body, promises) {
     var dir  = "resources/" + webapp + "/" + mesh_filename.substr(0, mesh_filename.lastIndexOf("/") + 1);
     var file = mesh_filename.substr(mesh_filename.lastIndexOf("/") + 1);
 
-    var promise_mtllibs = new Promise((resolve, reject) => {
+    var promise_obj = new Promise((resolve, reject) => {
       new THREE.OBJLoader()
         .setPath(dir)
         .load(file, (obj) => {
-          resolve(obj.materialLibraries);
+          if (obj.materialLibraries.length === 0) {
+            resolve(obj);
+            return;
+          }
+
+          // TODO: Support only one material resource for now
+          var promise_mtl = new Promise((resolve, reject) => {
+            var mtllib = obj.materialLibraries[0];
+            new THREE.MTLLoader()
+              .setPath(dir)
+              .load(mtllib, (mtl) => {
+                mtl.preload();
+                resolve(mtl);
+              }, null, reject);
+          });
+
+          // Reload obj
+          promise_mtl.then((mtl) => {
+            new THREE.OBJLoader()
+              .setMaterials(mtl)
+              .setPath(dir)
+              .load(file, resolve, null, reject);
+          });
         }, null, reject);
-    });
-
-    var promise_mtl = new Promise((resolve, reject) => {
-      promise_mtllibs.then((mtllibs) => {
-        // TODO: Support only one material resource for now
-        var mtllib = mtllibs[0];
-        new THREE.MTLLoader()
-          .setPath(dir)
-          .load(mtllib, (mtl) => {
-            mtl.preload();
-            resolve(mtl);
-          }, null, reject);
-      });
-    });
-
-    var promise_obj = new Promise((resolve, reject) => {
-      promise_mtl.then((mtl) => {
-        new THREE.OBJLoader()
-          .setMaterials(mtl)
-          .setPath(dir)
-          .load(file, resolve, null, reject);
-      });
     });
 
     promises.push(new Promise((resolve, reject) => {
@@ -59,25 +59,11 @@ export function parse(graphicsStruct, body, promises) {
 
   } else if (graphicsStruct.geometry.type == "box") {
 
-    var box;
-    if (body.children.length == 0) {
-
-      var geometry = new THREE.BoxGeometry();
-      var material = new THREE.MeshNormalMaterial();
-      material.transparent = true;
-      box = new THREE.Mesh(geometry, material);
-      body.add(box);
-
-    } else {
-
-      box = body.children[0];
-
-      if (box.geometry.type != "BoxGeometry") {
-        box.geometry.dispose();
-        box.geometry = new THREE.BoxGeometry();
-      }
-
-    }
+    let geometry = new THREE.BoxGeometry();
+    let material = new THREE.MeshNormalMaterial();
+    material.transparent = true;
+    let box = new THREE.Mesh(geometry, material);
+    body.add(box);
 
     box.material.opacity = graphicsStruct.material.rgba[3];
     box.material.needsUpdate = true;
@@ -85,28 +71,93 @@ export function parse(graphicsStruct, body, promises) {
     box.position.fromArray(graphicsStruct.pos);
     box.scale.fromArray(graphicsStruct.geometry.scale);
 
+  } else if (graphicsStruct.geometry.type == "capsule") {
+
+    let obj = new THREE.Object3D();
+
+    let geometry = new THREE.CylinderGeometry(graphicsStruct.geometry.radius,
+                                              graphicsStruct.geometry.radius,
+                                              graphicsStruct.geometry.length,
+                                              16, 1, true);
+    let material = new THREE.MeshNormalMaterial();
+    material.transparent = true;
+    let cylinder = new THREE.Mesh(geometry, material);
+    obj.add(cylinder);
+
+    let ends = [];
+    const thetaRanges = [[0., Math.PI / 2.], [Math.PI / 2., Math.PI]];
+    for (let i = 0; i < 2; i++) {
+      let geometry = new THREE.SphereGeometry(graphicsStruct.geometry.radius, 16, 16,
+                                              0., Math.PI * 2.,
+                                              thetaRanges[i][0], thetaRanges[i][1]);
+      let material = new THREE.MeshNormalMaterial();
+      material.transparent = true;
+      ends.push(new THREE.Mesh(geometry, material));
+      obj.add(ends[i]);
+    }
+    ends[0].position.setY(graphicsStruct.geometry.length / 2.);
+    ends[1].position.setY(-graphicsStruct.geometry.length / 2.);
+
+    cylinder.material.opacity = graphicsStruct.material.rgba[3];
+    cylinder.material.needsUpdate = true;
+    ends[0].material.opacity = graphicsStruct.material.rgba[3];
+    ends[0].material.needsUpdate = true;
+    ends[1].material.opacity = graphicsStruct.material.rgba[3];
+    ends[1].material.needsUpdate = true;
+    obj.quaternion.set(graphicsStruct.quat.x, graphicsStruct.quat.y,
+                       graphicsStruct.quat.z, graphicsStruct.quat.w);
+    obj.position.fromArray(graphicsStruct.pos);
+
+    body.add(obj);
+
   } else if (graphicsStruct.geometry.type == "sphere") {
 
     let sphere;
-    if (body.children.length === 0) {
+    // if (body.children.length === 0) {
       let geometry = new THREE.SphereGeometry(1, 16, 16);
       let material = new THREE.MeshNormalMaterial();
       material.transparent = true;
       sphere = new THREE.Mesh(geometry, material);
       body.add(sphere);
-    } else {
-      sphere = body.children[0];
-      if (sphere.geometry.type != "SphereGeometry") {
-        sphere.geometry.dispose();
-        sphere.geometry = new THREE.SphereGeometry(1, 16, 16);
-      }
-    }
+    // } else {
+    //   sphere = body.children[0];
+    //   if (sphere.geometry.type != "SphereGeometry") {
+    //     sphere.geometry.dispose();
+    //     sphere.geometry = new THREE.SphereGeometry(1, 16, 16);
+    //   }
+    // }
 
     sphere.material.opacity = graphicsStruct.material.rgba[3];
     sphere.material.needsUpdate = true;
     sphere.quaternion.set(graphicsStruct.quat.x, graphicsStruct.quat.y, graphicsStruct.quat.z, graphicsStruct.quat.w);
     sphere.position.fromArray(graphicsStruct.pos);
     sphere.scale.setScalar(graphicsStruct.geometry.radius);
+
+  } else if (graphicsStruct.geometry.type == "cylinder") {
+
+    let cylinder;
+    // if (body.children.length === 0) {
+      let geometry = new THREE.CylinderGeometry(1, 1, 1, 16);
+      let material = new THREE.MeshNormalMaterial();
+      material.transparent = true;
+      cylinder = new THREE.Mesh(geometry, material);
+      body.add(cylinder);
+    // } else {
+    //   cylinder = body.children[0];
+    //   if (cylinder.geometry.type != "CylinderGeometry") {
+    //     cylinder.geometry.dispose();
+    //     cylinder.geometry = new THREE.CylinderGeometry(1, 1, 1, 16);
+    //   }
+    // }
+
+    cylinder.material.opacity = graphicsStruct.material.rgba[3];
+    cylinder.material.needsUpdate = true;
+    cylinder.quaternion.set(graphicsStruct.quat.x, graphicsStruct.quat.y, graphicsStruct.quat.z, graphicsStruct.quat.w);
+    cylinder.position.fromArray(graphicsStruct.pos);
+    cylinder.scale.setScalar(graphicsStruct.geometry.radius);
+    cylinder.scale.setY(graphicsStruct.geometry.length);
+
+    console.log(cylinder);
 
   }
 

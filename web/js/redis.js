@@ -162,6 +162,28 @@ export function matrixToString(matrix) {
   return matrix.map((row) => row.join(" ")).join("; ");
 }
 
+export function stringToMatrix(string, makeNumeric) {
+  makeNumeric = false || makeNumeric;
+  if (makeNumeric) {
+    return string.trim().split(";").map((row) => row.trim().split(" ").map(parseFloat));
+  } else {
+    return string.trim().split(";").map((row) => row.trim().split(" "));
+  }
+}
+
+export function isNumeric(string) {
+  return !isNaN(parseFloat(string));
+}
+
+export function makeNumeric(arr) {
+  if (arr.length === 0) return arr;
+  if (typeof(arr[0]) === "string") {
+    return arr.map(parseFloat);
+  } else {
+    return arr.map((row) => row.map(parseFloat));
+  }
+}
+
 export function matrixDim(val) {
   if (typeof(val) === "string") return "";
   return [val.length, val[0].length].toString();
@@ -189,3 +211,77 @@ export function sendAjax(command, key, val, verbose) {
   });
 }
 
+/**
+ * Parse websocket data format.
+ */
+function parsePayload(buffer, idx) {
+  // Parse payload type
+  const type = new DataView(buffer, idx).getUint8() & 0b01111111;
+  idx += 1;
+
+  // Parse payload size
+  let lenPayload = new DataView(buffer, idx).getUint8();
+  idx += 1;
+  if (lenPayload == 126) {
+    // Medium payload size
+    lenPayload = new DataView(buffer, idx).getUint16();
+    idx += 2;
+  } else if (lenPayload == 127) {
+    // Large payload size
+    lenPayload = new DataView(buffer, idx).getBigUint64();
+    idx += 8;
+  }
+
+  // Parse payload
+  if (type == 1) {
+    // String
+    let payload = new Uint8Array(buffer, idx, lenPayload);
+    return [idx + lenPayload, String.fromCharCode.apply(null, new Uint8Array(payload))];
+  } else if (type == 2) {
+    // Binary
+    let payload = buffer.slice(idx, idx + lenPayload);
+    return [idx + lenPayload, payload];
+  }
+}
+
+export function parseMessage(buffer) {
+  let idx = 0;
+
+  // Parse number of keys to update
+  const numUpdates = new DataView(buffer, idx).getUint32();
+  idx += 4;
+
+  let updateKeyVals = {};
+  for (let i = 0; i < numUpdates; i++) {
+    // Parse key
+    const idxKey = parsePayload(buffer, idx);
+    idx = idxKey[0];
+    const key = idxKey[1];
+
+    // Parse val
+    const idxVal = parsePayload(buffer, idx);
+    idx = idxVal[0];
+    const val = idxVal[1];
+
+    updateKeyVals[key] = val;
+  }
+
+  // Parse number of keys to delete
+  const numDeletes = (new DataView(buffer, idx)).getUint32();
+  idx += 4;
+
+  let deleteKeys = [];
+  for (let i = 0; i < numDeletes; i++) {
+    // Parse key
+    const idxKey = parsePayload(buffer, idx);
+    idx = idxKey[0];
+    const key = idxKey[1];
+
+    deleteKeys.push(key);
+  }
+
+  return {
+    toUpdate: updateKeyVals,
+    toDelete: deleteKeys
+  };
+}
