@@ -20,7 +20,7 @@ class RedisMonitor:
         self.key_filter = key_filter
         self.realtime = realtime
 
-        self.redis_db = redis.Redis(host=self.host, port=self.port, db=self.db, decode_responses=True)
+        self.redis_db = redis.Redis(host=self.host, port=self.port, db=self.db, decode_responses=False)
         self.message_last = {}
 
         if self.realtime:
@@ -94,10 +94,7 @@ class RedisMonitor:
 
         try:
             # If the first element is a number, try converting all the elements to numbers
-            if isnumeric(val.split(" ")[0]):
-                # Parse matrix rows
-                val = [[float(el) for el in row.split(" ") if el.strip()] for row in val.split(";")]
-                val = [["NaN" if math.isnan(el) else el for el in row] for row in val]
+            val = val.decode("utf-8")
         except:
             # Otherwise, leave it as a string
             pass
@@ -118,14 +115,14 @@ class RedisMonitor:
                 key_vals = []
                 new_keys = set()
                 for key in self.redis_db.scan_iter():
-                    if self.redis_db.type(key) != "string":
+                    if self.redis_db.type(key) != b"string":
                         continue
-                    new_keys.add(key)
+                    new_keys.add(key.decode("utf-8"))
 
                     val = self.parse_val(key)
                     if val is None:
                         continue
-                    key_vals.append((key, val))
+                    key_vals.append((key.decode("utf-8"), val))
 
                 del_keys = list(prev_keys - new_keys)
                 prev_keys = new_keys
@@ -167,13 +164,13 @@ class RedisMonitor:
         # TODO: Don't disrupt other clients
         self.message_last = {}
         for key in sorted(self.redis_db.scan_iter()):
-            if self.redis_db.type(key) != "string":
+            if self.redis_db.type(key) != b"string":
                 continue
 
             val = self.parse_val(key, skip_unchanged=False)
             if val is None:
                 continue
 
-            key_vals.append((key, val))
+            key_vals.append((key.decode("utf-8"), val))
 
         client.send(ws_server.encode_message({"update": key_vals, "delete": []}))

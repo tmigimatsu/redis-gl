@@ -118,41 +118,64 @@ class WebSocketServer:
         client.close()
 
     @staticmethod
-    def encode_message(message):
+    def encode_bytes(message):
         """
         Encode web socket message to send to client.
         If the message is an object, it will be encoded as JSON.
         """
 
-        if type(message) == bytes:
-            pass
-        elif type(message) == str:
-            message = message.encode("utf-8")
-        else:
-            message = json.dumps(message).encode("utf-8")
-
         # Send entire message as one frame
         b1 = 0b10000000
+
+        if type(message) == str:
+            b1 |= 0b00000001
+            message = message.encode("utf-8")
+        else:
+            b1 |= 0b00000010
+
         # Send text data
-        b1 |= 0b00000001
         encoded_bytes = struct.pack("!B", b1)
 
         # Encode message length
         length = len(message)
         if length < 126:
             b2 = length
-            encoded_bytes += struct.pack("!B", b2)
+            encoded_bytes += struct.pack("!B", b2)  # byte
         elif length < (2 ** 16) - 1:
             b2 = 126
-            encoded_bytes += struct.pack("!BH", b2, length)
+            encoded_bytes += struct.pack("!BH", b2, length)  # byte, short
         else:
             b2 = 127
-            encoded_bytes += struct.pack("!BQ", b2, length)
+            encoded_bytes += struct.pack("!BQ", b2, length)  # byte, long long
 
         # Append encoded_bytes
         encoded_bytes += message
 
         return encoded_bytes
+
+    @staticmethod
+    def encode_message(message):
+        """
+        Encode web socket message to send to client.
+        If the message is an object, it will be encoded as JSON.
+        """
+
+        if type(message) is bytes:
+            pass
+        elif type(message) is str:
+            message = message.encode("utf-8")
+        else:
+            update_message = struct.pack("!L", len(message["update"]))  # long
+            for key, val in message["update"]:
+                update_message += WebSocketServer.encode_bytes(key) + WebSocketServer.encode_bytes(val)
+
+            delete_message = struct.pack("!L", len(message["delete"]))  # long
+            for key in message["delete"]:
+                delete_message += WebSocketServer.encode_bytes(key)
+
+            message = update_message + delete_message
+
+        return WebSocketServer.encode_bytes(message)
 
     @staticmethod
     def decode_message(message):

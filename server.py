@@ -61,7 +61,7 @@ def make_handle_get_request(redis_monitor):
             request_handler.wfile.write(str(kwargs["ws_port"]).encode("utf-8"))
             return
         elif len(path_tokens) > 2 and path_tokens[0] == "resources":
-            path_resources = redis_monitor.redis_db.hget("webapp::resources", path_tokens[1])
+            path_resources = redis_monitor.redis_db.hget("webapp::resources", path_tokens[1]).decode("utf-8")
             if path_resources:
                 request_path = os.path.join(path_resources, *path_tokens[2:])
             else:

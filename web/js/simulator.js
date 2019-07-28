@@ -1,28 +1,54 @@
 /**
- * redis-web-gui.js
+ * simulator.js
  *
  * Author: Toki Migimatsu
  * Created: December 2017
  */
 
-import * as graphics from "./graphics.js"
-import * as redis from "./redis.js"
+import * as Camera from "./camera.js"
+import * as Graphics from "./graphics.js"
+import * as GraphicsObject from "./object.js"
+import * as Redis from "./redis.js"
+import * as Robot from "./robot.js"
+import * as Trajectory from "./trajectory.js"
 
 var AXIS_WIDTH = 0.005;
 var AXIS_SIZE  = 0.1;
-var LEN_TRAJECTORY_TRAIL = 500;
 
 var KEY_ARGS          = "webapp::simulator::args";
 var KEY_INTERACTION   = "webapp::simulator::interaction";
 var KEY_CAMERA_POS    = "webapp::simulator::camera::pos";
 var KEY_CAMERA_TARGET = "webapp::simulator::camera::target";
+var KEY_TRAJ_RESET    = "webapp::simulator::trajectory::reset";
+
+var SCHEMA_ARGS = {
+  key_cameras_prefix: "",
+  key_objects_prefix: "",
+  key_robots_prefix: "",
+  key_trajectories_prefix: ""
+};
+
+var SCHEMA_ROBOT_MODEL = {
+  articulated_body: {},
+  key_q: ""
+};
+
+var SCHEMA_OBJECT_MODEL = {
+  key_graphics: [{}],
+  key_ori: "",
+  key_pos: ""
+};
+
+var SCHEMA_TRAJECTORY_MODEL = {
+  key_pos: ""
+};
 
 $(document).ready(function() {
 
   // Set up web socket
   $.get("/get_websocket_port", function(ws_port) {
     let ws = new WebSocket("ws://" + window.location.hostname + ":" + ws_port);
-    ws.onmessage = handleMessage;
+    ws.onmessage = (e) => new Response(e.data).arrayBuffer().then(handleMessage);
   });
 
   let camera, scene, renderer, raycaster, controls;
