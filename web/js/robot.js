@@ -7,10 +7,15 @@
  * Authors: Toki Migimatsu
  */
 
+import * as Graphics from "./graphics.js"
 import * as Redis from "./redis.js"
+
+var AXIS_WIDTH = 0.005;
+var AXIS_SIZE  = 0.1;
 
 export function create(model, loadCallback) {
   const ab = model["articulated_body"];
+  console.log(ab);
 
   // Create base
   let base = new THREE.Object3D();
@@ -20,7 +25,7 @@ export function create(model, loadCallback) {
   // Load base graphics
   let promises = [];
   ab.graphics.forEach((graphicsStruct) => {
-    graphics.parse(graphicsStruct, base, promises);
+    Graphics.parse(graphicsStruct, base, promises);
   });
 
   // Iterate over rigid bodies
@@ -58,11 +63,11 @@ export function create(model, loadCallback) {
 
     // Load body graphics
     rb.graphics.forEach((graphicsStruct) => {
-      graphics.parse(graphicsStruct, body, promises);
+      Graphics.parse(graphicsStruct, body, promises);
     });
 
     // Add frame axes
-    body.add(graphics.axes(AXIS_SIZE, AXIS_WIDTH));
+    body.add(Graphics.axes(AXIS_SIZE, AXIS_WIDTH));
 
     // Add body to parent
     bodies.push(body);

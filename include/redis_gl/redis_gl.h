@@ -10,7 +10,10 @@
 #ifndef REDIS_GL_REDIS_GL_H_
 #define REDIS_GL_REDIS_GL_H_
 
-#include <string>  // std::string
+#include <set>      // std::set
+#include <sstream>  // std::stringstream
+#include <string>   // std::string
+#include <utility>  // std::move
 
 #include <ctrl_utils/redis_client.h>
 
@@ -21,17 +24,17 @@ namespace redis_gl {
 
 namespace webapp {
 
-const std::string kPrefix = "webapp::";
-const std::string kResources = kPrefix + "resources";  // webapp::resources
+const std::string KEY_PREFIX = "webapp::";
+const std::string KEY_RESOURCES = KEY_PREFIX + "resources";  // webapp::resources
 
 }  // namespace webapp
 
 namespace simulator {
 
 const std::string kName = "simulator";
-const std::string kPrefix = webapp::kPrefix + kName + "::";  // webapp::simulator::
-const std::string kArgs = kPrefix + "args";                  // webapp::simulator::args
-const std::string kInteraction = kPrefix + "interaction";    // webapp::simulator::interaction
+const std::string KEY_PREFIX = webapp::KEY_PREFIX + kName + "::";  // webapp::simulator::
+const std::string KEY_ARGS = KEY_PREFIX + "args";                  // webapp::simulator::args
+const std::string KEY_INTERACTION = KEY_PREFIX + "interaction";    // webapp::simulator::interaction
 
 struct ModelKeys {
 
@@ -49,6 +52,52 @@ struct ModelKeys {
 
 };
 
+struct Interaction {
+
+  enum class Key {
+    kUndefined,
+    kAlt,
+    kCtrl,
+    kMeta,
+    kShift
+  };
+
+  std::string key_object;
+  int idx_link;
+  Eigen::Vector3d pos_click_in_link;
+  Eigen::Vector3d pos_mouse_in_world;
+  std::set<Key> modifier_keys;
+  std::string key_down;
+
+};
+
+void from_json(const nlohmann::json& json, Interaction::Key& key) {
+  std::string str_key = json.get<std::string>();
+  if (str_key == "alt") key = Interaction::Key::kAlt;
+  else if (str_key == "ctrl") key = Interaction::Key::kCtrl;
+  else if (str_key == "meta") key = Interaction::Key::kMeta;
+  else if (str_key == "shift") key = Interaction::Key::kShift;
+  else key = Interaction::Key::kUndefined;
+}
+
+void from_json(const nlohmann::json& json, Interaction& interaction) {
+  interaction.key_object = json["key_object"].get<std::string>();
+  interaction.idx_link = json["idx_link"].get<int>();
+  const std::array<double, 3> pos_click_in_link = json["pos_click_in_link"].get<std::array<double, 3>>();
+  const std::array<double, 3> pos_mouse_in_world = json["pos_mouse_in_world"].get<std::array<double, 3>>();
+  interaction.pos_click_in_link = Eigen::Map<const Eigen::Vector3d>(pos_click_in_link.data());
+  interaction.pos_mouse_in_world = Eigen::Map<const Eigen::Vector3d>(pos_mouse_in_world.data());
+  interaction.modifier_keys = json["modifier_keys"].get<std::set<Interaction::Key>>();
+  interaction.key_down = json["key_down"].get<std::string>();
+}
+
+std::stringstream& operator>>(std::stringstream& ss, Interaction& interaction) {
+  nlohmann::json json;
+  ss >> json;
+  interaction = json.get<Interaction>();
+  return ss;
+}
+
 /**
  * Register the directory of resources for the web app.
  *
@@ -61,8 +110,8 @@ struct ModelKeys {
  */
 void RegisterResourcePath(ctrl_utils::RedisClient& redis,
                           const std::string& path,
-                          bool commit = false) override {
-  redis.hset(webapp::kResources, kName, path);
+                          bool commit = false) {
+  redis.hset(webapp::KEY_RESOURCES, kName, path);
   if (commit) redis.commit();
 }
 
@@ -74,7 +123,7 @@ void RegisterModelKeys(ctrl_utils::RedisClient& redis,
   args["key_objects_prefix"] = model_keys.key_objects_prefix;
   args["key_trajectories_prefix"] = model_keys.key_trajectories_prefix;
   args["key_cameras_prefix"] = model_keys.key_cameras_prefix;
-  redis.set(kArgs, args);
+  redis.set(KEY_ARGS, args);
   if (commit) redis.commit();
 }
 
@@ -102,6 +151,20 @@ void RegisterObject(ctrl_utils::RedisClient& redis,
   model["key_pos"] = key_pos;
   model["key_ori"] = key_ori;
   redis.set(model_keys.key_objects_prefix + name, model);
+  if (commit) redis.commit();
+}
+
+void RegisterObject(ctrl_utils::RedisClient& redis,
+                    const ModelKeys& model_keys,
+                    const spatial_dyn::Graphics& graphics,
+                    const std::string& key_pos,
+                    const std::string& key_ori,
+                    bool commit = false) {
+  nlohmann::json model;
+  model["graphics"] = { graphics };
+  model["key_pos"] = key_pos;
+  model["key_ori"] = key_ori;
+  redis.set(model_keys.key_objects_prefix + graphics.name, model);
   if (commit) redis.commit();
 }
 
@@ -134,6 +197,15 @@ void RegisterCamera(ctrl_utils::RedisClient& redis,
   redis.set(model_keys.key_cameras_prefix + name, model);
   if (commit) redis.commit();
 }
+
+// std::future<Interaction> GetInteraction(ctrl_utils::RedisClient& redis, bool commit = false) {
+//   auto promise = std::make_shared<std::promise<Interaction>>();
+//   redis.get<nlohmann::json>(KEY_INTERACTION, [promise](const nlohmann::json& json) {
+//     promise->set_value(json.get<Interaction>());
+//   });
+//   if (commit) redis.commit();
+//   return promise->get_future();
+// }
 
 }  // namespace simulator
 

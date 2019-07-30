@@ -10,6 +10,9 @@
 import * as Graphics from "./graphics.js"
 import * as Redis from "./redis.js"
 
+var AXIS_WIDTH = 0.005;
+var AXIS_SIZE  = 0.1;
+
 export function create(model, loadCallback) {
   // Create object
   let object = new THREE.Object3D();
@@ -19,6 +22,7 @@ export function create(model, loadCallback) {
   model["graphics"].forEach((graphicsStruct) => {
     Graphics.parse(graphicsStruct, object, promises);
   });
+  object.add(Graphics.axes(AXIS_SIZE, AXIS_WIDTH));
 
   Promise.all(promises).then(() => loadCallback(object));
   return object;

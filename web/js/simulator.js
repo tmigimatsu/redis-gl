@@ -129,10 +129,16 @@ $(document).ready(function() {
       if (typeof(val) === "object") continue;
 
       // Try parsing all model types
-      if (!parseCameraModel(key, val) &&
-          !parseObjectModel(key, val) &&
-          !parseRobotModel(key, val) &&
-          !parseTrajectoryModel(key, val)) continue;
+      try {
+        if (!parseCameraModel(key, val) &&
+            !parseObjectModel(key, val) &&
+            !parseRobotModel(key, val) &&
+            !parseTrajectoryModel(key, val)) continue;
+      } catch (error) {
+        console.error(error);
+        console.error("Failed to parse model " + key + ":\n" + val);
+        return false;
+      }
 
       // Update html
       Redis.updateForm(key, val, true, true, true);
@@ -140,21 +146,23 @@ $(document).ready(function() {
   }
 
   function parseRobotModel(key, val) {
-    if (!key.startsWith(args["key_robots_prefix"])) return false;
+    if (args["key_robots_prefix"] === "" ||
+        !key.startsWith(args["key_robots_prefix"])) return false;
 
     // Parse robot model
     const model = JSON.parse(val);
     addComponentToScene(Robot, robots, key, model);
     registerRedisUpdateCallback(model["key_q"], key, robots[key], (robot, val) => {
       const renderFrame = Robot.updateQ(robot, val);
-      updateInteraction(key, object);
+      updateInteraction(key, robot.redisgl.bodies);
       return renderFrame;
     });
     return true;
   }
 
   function parseObjectModel(key, val) {
-    if (!key.startsWith(args["key_objects_prefix"])) return false;
+    if (args["key_objects_prefix"] === "" ||
+        !key.startsWith(args["key_objects_prefix"])) return false;
 
     const model = JSON.parse(val);
     addComponentToScene(GraphicsObject, objects, key, model);
@@ -163,12 +171,17 @@ $(document).ready(function() {
       updateInteraction(key, object);
       return renderFrame;
     });
-    registerRedisUpdateCallback(model["key_ori"], key, objects[key], GraphicsObject.updateOrientation);
+    registerRedisUpdateCallback(model["key_ori"], key, objects[key], (object, val) => {
+      const renderFrame = GraphicsObject.updateOrientation(object, val);
+      updateInteraction(key, object);
+      return renderFrame;
+    });
     return true;
   }
 
   function parseTrajectoryModel(key, val) {
-    if (!key.startsWith(args["key_trajectories_prefix"])) return false;
+    if (args["key_trajectories_prefix"] === "" ||
+        !key.startsWith(args["key_trajectories_prefix"])) return false;
 
     // Parse object model
     const model = JSON.parse(val);
@@ -178,7 +191,8 @@ $(document).ready(function() {
   }
 
   function parseCameraModel(key, val) {
-    if (!key.startsWith(args["key_cameras_prefix"])) return false;
+    if (args["key_cameras_prefix"] === "" || 
+        !key.startsWith(args["key_cameras_prefix"])) return false;
 
     // Parse object model
     const model = JSON.parse(val);
@@ -299,7 +313,7 @@ $(document).ready(function() {
 
     let posClick = new THREE.Vector3();
     posClick.fromArray(interaction["pos_click_in_link"]);
-    if ("redisgl" in bodies) {
+    if (bodies.constructor === Array) {
       // Robot
       bodies[interaction["idx_link"]].localToWorld(posClick);
     } else {
@@ -353,14 +367,14 @@ $(document).ready(function() {
 
     const key_object = keyVal[0];
     const object     = keyVal[1];
-    interaction.key_object = key_object;
+    interaction["key_object"] = key_object;
     if (key_object in robots) {
-      interaction.idx_link = robots[key_object].redisgl.bodies.indexOf(object);
+      interaction["idx_link"] = robots[key_object].redisgl.bodies.indexOf(object);
     }
     let posClickInBody = intersect.point.clone();
     object.worldToLocal(posClickInBody);
-    interaction.pos_click_in_link = posClickInBody.toArray();
-    interaction.modifier_keys = getModifierKeys(event);
+    interaction["pos_click_in_link"] = posClickInBody.toArray();
+    interaction["modifier_keys"] = getModifierKeys(event);
 
     // Create mouse line
     let lineGeometry = new THREE.BufferGeometry();
