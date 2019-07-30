@@ -1,0 +1,14 @@
+############################################################
+# CMake config for the redis-gl library.
+#
+# Copyright 2019. All Rights Reserved.
+#
+# Created: July 25, 2019
+# Authors: Toki Migimatsu
+############################################################
+
+include(CMakeFindDependencyMacro)
+
+if(NOT TARGET redis_gl::redis_gl)
+    include("@CMAKE_BINARY_DIR@/redis_glTargets.cmake")
+endif()
