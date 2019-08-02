@@ -61,10 +61,17 @@ def make_handle_get_request(redis_monitor):
             request_handler.wfile.write(str(kwargs["ws_port"]).encode("utf-8"))
             return
         elif len(path_tokens) > 2 and path_tokens[0] == "resources":
-            path_resources = redis_monitor.redis_db.hget("webapp::resources", path_tokens[1]).decode("utf-8")
-            if path_resources:
-                request_path = os.path.join(path_resources, *path_tokens[2:])
-            else:
+            path_resources = redis_monitor.redis_db.smembers("webapp::resources::{}".format(path_tokens[1]))
+            request_path = None
+            if path_resources is not None:
+                for path_resource in path_resources:
+                    request_path = os.path.join(path_resource.decode("utf-8"), *path_tokens[2:])
+                    print(request_path)
+                    if os.path.isfile(request_path):
+                        break
+                    request_path = None
+
+            if request_path is None:
                 request_path = os.path.join(WEB_DIRECTORY, *path_tokens)
         else:
             file_ext = os.path.splitext(path_tokens[0])

@@ -33,7 +33,7 @@ export function create(model, loadCallback) {
   return traj;
 }
 
-function appendPosition(traj, val) {
+export function appendPosition(traj, val) {
   const pos = Redis.makeNumeric(val[0]);
   let geometry1 = traj.children[0].geometry;
   let geometry2 = traj.children[1].geometry;
@@ -46,9 +46,9 @@ function appendPosition(traj, val) {
     spec.idx = 1;
   }
 
-  if (traj.len < LEN_TRAJECTORY_TRAIL) {
-    traj.len++;
-    geometry1.setDrawRange(0, traj.len);
+  if (spec.len < LEN_TRAJECTORY_TRAIL) {
+    spec.len++;
+    geometry1.setDrawRange(0, spec.len);
     geometry1.attributes.position.needsUpdate = true;
   } else {
     geometry1.setDrawRange(0, spec.idx);
@@ -58,7 +58,7 @@ function appendPosition(traj, val) {
   }
 }
 
-function reset(traj) {
+export function reset(traj) {
   let spec = traj.redisgl;
   spec.idx = 0;
   spec.len = 0;

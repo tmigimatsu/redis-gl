@@ -7,57 +7,89 @@
  * Authors: Toki Migimatsu
  */
 
+function loadObj(dir, file) {
+  return new Promise((resolve, reject) => {
+    new THREE.OBJLoader()
+      .setPath(dir)
+      .load(file, (obj) => {
+        if (obj.materialLibraries.length === 0) {
+          resolve(obj);
+          return;
+        }
+
+        // TODO: Support only one material resource for now
+        var promise_mtl = new Promise((resolve, reject) => {
+          var mtllib = obj.materialLibraries[0];
+          new THREE.MTLLoader()
+            .setPath(dir)
+            .load(mtllib, (mtl) => {
+              mtl.preload();
+              resolve(mtl);
+            }, null, reject);
+        });
+
+        // Reload obj
+        promise_mtl.then((mtl) => {
+          new THREE.OBJLoader()
+            .setMaterials(mtl)
+            .setPath(dir)
+            .load(file, resolve, null, reject);
+        });
+      }, null, reject);
+  });
+}
+
+function loadDae(dir, file) {
+  return new Promise((resolve, reject) => {
+    new THREE.ColladaLoader()
+      .setPath(dir)
+      .load(file, resolve, null, reject);
+  })
+}
+
 export function parse(graphicsStruct, body, promises) {
 
-  if (graphicsStruct.geometry.type == "mesh") {
+  const T_to_parent = graphicsStruct["T_to_parent"];
+  const geometryStruct = graphicsStruct["geometry"];
+  const materialStruct = graphicsStruct["material"];
+  const type = geometryStruct["type"];
 
-    var mesh_filename = graphicsStruct.geometry.mesh;
-    var webapp = location.pathname.split("/").pop();
+  if (type == "mesh") {
+
+    const meshFilename = geometryStruct["mesh"];
+    let webapp = location.pathname.split("/").pop();
     webapp = webapp.substr(0, webapp.lastIndexOf("."));
-    var dir  = "resources/" + webapp + "/" + mesh_filename.substr(0, mesh_filename.lastIndexOf("/") + 1);
-    var file = mesh_filename.substr(mesh_filename.lastIndexOf("/") + 1);
+    const dir  = "resources/" + webapp + "/" + meshFilename.substr(0, meshFilename.lastIndexOf("/") + 1);
+    const file = meshFilename.substr(meshFilename.lastIndexOf("/") + 1);
+    const ext = meshFilename.substr(meshFilename.lastIndexOf(".") + 1);
 
-    var promise_obj = new Promise((resolve, reject) => {
-      new THREE.OBJLoader()
-        .setPath(dir)
-        .load(file, (obj) => {
-          if (obj.materialLibraries.length === 0) {
-            resolve(obj);
-            return;
-          }
-
-          // TODO: Support only one material resource for now
-          var promise_mtl = new Promise((resolve, reject) => {
-            var mtllib = obj.materialLibraries[0];
-            new THREE.MTLLoader()
-              .setPath(dir)
-              .load(mtllib, (mtl) => {
-                mtl.preload();
-                resolve(mtl);
-              }, null, reject);
-          });
-
-          // Reload obj
-          promise_mtl.then((mtl) => {
-            new THREE.OBJLoader()
-              .setMaterials(mtl)
-              .setPath(dir)
-              .load(file, resolve, null, reject);
-          });
-        }, null, reject);
-    });
+    let promise;
+    if (ext === "obj") {
+      promise = loadObj(dir, file);
+    } else if (ext === "dae") {
+      promise = loadDae(dir, file);
+    } else {
+      console.error("Unsupported filetype: " + meshFilename);
+      return;
+    }
 
     promises.push(new Promise((resolve, reject) => {
-      promise_obj.then((obj) => {
-        obj.quaternion.set(graphicsStruct.quat.x, graphicsStruct.quat.y, graphicsStruct.quat.z, graphicsStruct.quat.w);
-        obj.position.fromArray(graphicsStruct.pos);
-        obj.scale.fromArray(graphicsStruct.geometry.scale);
+      promise.then((mesh) => {
+        let obj = mesh;
+        if (!("quaternion" in mesh)) {
+          obj = mesh.scene;
+        }
+
+        const quat = T_to_parent["ori"];
+        obj.quaternion.set(quat["x"], quat["y"], quat["z"], quat["w"]);
+        obj.position.fromArray(T_to_parent["pos"]);
+        obj.scale.fromArray(geometryStruct["scale"]);
         body.add(obj);
         resolve();
       });
     }));
 
-  } else if (graphicsStruct.geometry.type == "box") {
+  } else if (type == "box") {
 
     let geometry = new THREE.BoxGeometry();
     let material = new THREE.MeshNormalMaterial();
@@ -65,19 +97,21 @@ export function parse(graphicsStruct, body, promises) {
     let box = new THREE.Mesh(geometry, material);
     body.add(box);
 
-    box.material.opacity = graphicsStruct.material.rgba[3];
+    box.material.opacity = materialStruct["rgba"][3];
     box.material.needsUpdate = true;
-    box.quaternion.set(graphicsStruct.quat.x, graphicsStruct.quat.y, graphicsStruct.quat.z, graphicsStruct.quat.w);
-    box.position.fromArray(graphicsStruct.pos);
-    box.scale.fromArray(graphicsStruct.geometry.scale);
+    const T_to_parent = graphicsStruct["T_to_parent"];
+    const quat = T_to_parent["ori"];
+    box.quaternion.set(quat["x"], quat["y"], quat["z"], quat["w"]);
+    box.position.fromArray(T_to_parent["pos"]);
+    box.scale.fromArray(geometryStruct["scale"]);
 
-  } else if (graphicsStruct.geometry.type == "capsule") {
+  } else if (type == "capsule") {
 
     let obj = new THREE.Object3D();
 
-    let geometry = new THREE.CylinderGeometry(graphicsStruct.geometry.radius,
-                                              graphicsStruct.geometry.radius,
-                                              graphicsStruct.geometry.length,
+    let geometry = new THREE.CylinderGeometry(geometryStruct["radius"],
+                                              geometryStruct["radius"],
+                                              geometryStruct["length"],
                                               16, 1, true);
     let material = new THREE.MeshNormalMaterial();
     material.transparent = true;
@@ -98,15 +132,17 @@ export function parse(graphicsStruct, body, promises) {
     ends[0].position.setY(graphicsStruct.geometry.length / 2.);
     ends[1].position.setY(-graphicsStruct.geometry.length / 2.);
 
-    cylinder.material.opacity = graphicsStruct.material.rgba[3];
+    const opacity = materialStruct["rgba"][3]
+    cylinder.material.opacity = opacity;
     cylinder.material.needsUpdate = true;
-    ends[0].material.opacity = graphicsStruct.material.rgba[3];
+    ends[0].material.opacity = opacity;
     ends[0].material.needsUpdate = true;
-    ends[1].material.opacity = graphicsStruct.material.rgba[3];
+    ends[1].material.opacity = opacity;
     ends[1].material.needsUpdate = true;
-    obj.quaternion.set(graphicsStruct.quat.x, graphicsStruct.quat.y,
-                       graphicsStruct.quat.z, graphicsStruct.quat.w);
-    obj.position.fromArray(graphicsStruct.pos);
+    const T_to_parent = graphicsStruct["T_to_parent"];
+    const quat = T_to_parent["ori"];
+    obj.quaternion.set(quat["x"], quat["y"], quat["z"], quat["w"]);
+    obj.position.fromArray(T_to_parent["pos"]);
 
     body.add(obj);
 
@@ -127,11 +163,13 @@ export function parse(graphicsStruct, body, promises) {
     //   }
     // }
 
-    sphere.material.opacity = graphicsStruct.material.rgba[3];
+    sphere.material.opacity = materialStruct["rgba"][3];
     sphere.material.needsUpdate = true;
-    sphere.quaternion.set(graphicsStruct.quat.x, graphicsStruct.quat.y, graphicsStruct.quat.z, graphicsStruct.quat.w);
-    sphere.position.fromArray(graphicsStruct.pos);
-    sphere.scale.setScalar(graphicsStruct.geometry.radius);
+    const T_to_parent = graphicsStruct["T_to_parent"];
+    const quat = T_to_parent["ori"];
+    sphere.quaternion.set(quat["x"], quat["y"], quat["z"], quat["w"]);
+    sphere.position.fromArray(T_to_parent["pos"]);
+    sphere.scale.setScalar(geometryStruct["radius"]);
 
   } else if (graphicsStruct.geometry.type == "cylinder") {
 
@@ -150,14 +188,13 @@ export function parse(graphicsStruct, body, promises) {
     //   }
     // }
 
-    cylinder.material.opacity = graphicsStruct.material.rgba[3];
+    cylinder.material.opacity = materialStruct["rgba"][3];
     cylinder.material.needsUpdate = true;
-    cylinder.quaternion.set(graphicsStruct.quat.x, graphicsStruct.quat.y, graphicsStruct.quat.z, graphicsStruct.quat.w);
-    cylinder.position.fromArray(graphicsStruct.pos);
-    cylinder.scale.setScalar(graphicsStruct.geometry.radius);
-    cylinder.scale.setY(graphicsStruct.geometry.length);
-
-    console.log(cylinder);
+    const quat = T_to_parent["ori"];
+    cylinder.quaternion.set(quat["x"], quat["y"], quat["z"], quat["w"]);
+    cylinder.position.fromArray(T_to_parent["pos"]);
+    cylinder.scale.setScalar(geometryStruct["radius"]);
+    cylinder.scale.setY(geometryStruct["length"]);
 
   }
 

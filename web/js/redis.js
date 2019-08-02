@@ -52,6 +52,22 @@ function htmlForm(key, val, set, del) {
   return form;
 }
 
+export function getKeys() {
+  return $("form").map((i, form) => $(form).attr("data-key")).toArray();
+}
+
+export function getValue(key) {
+  let $form = getForm(key);
+  if ($form.find("div.val-string").length > 0) {
+    return $form.find("textarea.val").val();
+  }
+  return $form.find("div.val-row").map(function() {
+    return [$(this).find("input.val").map(function() {
+      return $(this).val();
+    }).get().filter(el => el !== "")];
+  }).get();
+}
+
 export function formExists(key) {
   let $form = $("form[data-key='" + key + "']");
   return $form.length > 0;

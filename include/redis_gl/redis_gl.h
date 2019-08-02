@@ -25,7 +25,7 @@ namespace redis_gl {
 namespace webapp {
 
 const std::string KEY_PREFIX = "webapp::";
-const std::string KEY_RESOURCES = KEY_PREFIX + "resources";  // webapp::resources
+const std::string KEY_RESOURCES_PREFIX = KEY_PREFIX + "resources::";  // webapp::resources::
 
 }  // namespace webapp
 
@@ -35,16 +35,19 @@ const std::string kName = "simulator";
 const std::string KEY_PREFIX = webapp::KEY_PREFIX + kName + "::";  // webapp::simulator::
 const std::string KEY_ARGS = KEY_PREFIX + "args";                  // webapp::simulator::args
 const std::string KEY_INTERACTION = KEY_PREFIX + "interaction";    // webapp::simulator::interaction
+const std::string KEY_RESOURCES = webapp::KEY_RESOURCES_PREFIX + kName;  // webapp::resources::simulator
 
 struct ModelKeys {
 
   ModelKeys() = default;
   ModelKeys(const std::string& key_namespace)
-      : key_robots_prefix(key_namespace + "::model::robot::"),
+      : key_namespace(key_namespace),
+        key_robots_prefix(key_namespace + "::model::robot::"),
         key_objects_prefix(key_namespace + "::model::object::"),
         key_trajectories_prefix(key_namespace + "::model::trajectory::"),
         key_cameras_prefix(key_namespace + "::model::camera::") {}
 
+  std::string key_namespace;
   std::string key_robots_prefix;
   std::string key_objects_prefix;
   std::string key_trajectories_prefix;
@@ -111,7 +114,14 @@ std::stringstream& operator>>(std::stringstream& ss, Interaction& interaction) {
 void RegisterResourcePath(ctrl_utils::RedisClient& redis,
                           const std::string& path,
                           bool commit = false) {
-  redis.hset(webapp::KEY_RESOURCES, kName, path);
+  redis.sadd(KEY_RESOURCES, { path });
+  if (commit) redis.commit();
+}
+
+void UnregisterResourcePath(ctrl_utils::RedisClient& redis,
+                            const std::string& path,
+                            bool commit = false) {
+  redis.srem(KEY_RESOURCES, { path });
   if (commit) redis.commit();
 }
 
@@ -123,7 +133,14 @@ void RegisterModelKeys(ctrl_utils::RedisClient& redis,
   args["key_objects_prefix"] = model_keys.key_objects_prefix;
   args["key_trajectories_prefix"] = model_keys.key_trajectories_prefix;
   args["key_cameras_prefix"] = model_keys.key_cameras_prefix;
-  redis.set(KEY_ARGS, args);
+  redis.set(KEY_ARGS + "::" + model_keys.key_namespace, args);
+  if (commit) redis.commit();
+}
+
+void UnregisterModelKeys(ctrl_utils::RedisClient& redis,
+                         const ModelKeys& model_keys,
+                         bool commit = false) {
+  redis.del({ KEY_ARGS + "::" + model_keys.key_namespace });
   if (commit) redis.commit();
 }
 
@@ -131,10 +148,14 @@ void RegisterRobot(ctrl_utils::RedisClient& redis,
                    const ModelKeys& model_keys,
                    const spatial_dyn::ArticulatedBody& ab,
                    const std::string& key_q,
+                   const std::string& key_pos = "",
+                   const std::string& key_ori = "",
                    bool commit = false) {
   nlohmann::json model;
   model["articulated_body"] = ab;
   model["key_q"] = key_q;
+  model["key_pos"] = key_pos;
+  model["key_ori"] = key_ori;
   redis.set(model_keys.key_robots_prefix + ab.name, model);
   if (commit) redis.commit();
 }
@@ -144,7 +165,7 @@ void RegisterObject(ctrl_utils::RedisClient& redis,
                     const std::string& name,
                     const std::vector<spatial_dyn::Graphics>& graphics,
                     const std::string& key_pos,
-                    const std::string& key_ori,
+                    const std::string& key_ori = "",
                     bool commit = false) {
   nlohmann::json model;
   model["graphics"] = graphics;
@@ -158,7 +179,7 @@ void RegisterObject(ctrl_utils::RedisClient& redis,
                     const ModelKeys& model_keys,
                     const spatial_dyn::Graphics& graphics,
                     const std::string& key_pos,
-                    const std::string& key_ori,
+                    const std::string& key_ori = "",
                     bool commit = false) {
   nlohmann::json model;
   model["graphics"] = { graphics };

@@ -15,12 +15,13 @@ var AXIS_SIZE  = 0.1;
 
 export function create(model, loadCallback) {
   const ab = model["articulated_body"];
-  console.log(ab);
 
   // Create base
   let base = new THREE.Object3D();
-  base.quaternion.set(ab.quat.x, ab.quat.y, ab.quat.z, ab.quat.w);
-  base.position.fromArray(ab.pos);
+  const T_to_world = ab["T_base_to_world"];
+  const quat = T_to_world["ori"];
+  base.quaternion.set(quat["x"], quat["y"], quat["z"], quat["w"]);
+  base.position.fromArray(T_to_world["pos"]);
 
   // Load base graphics
   let promises = [];
@@ -28,16 +29,24 @@ export function create(model, loadCallback) {
     Graphics.parse(graphicsStruct, base, promises);
   });
 
+  // Find end-effectors
+  let ee_ids = new Set(Array.from(Array(ab.rigid_bodies.length).keys()));
+  ab.rigid_bodies.forEach((rb) => {
+    ee_ids.delete(rb.id_parent);
+  });
+
   // Iterate over rigid bodies
   let bodies = [];
-  ab.rigid_bodies.forEach((rb) => {
+  ab["rigid_bodies"].forEach((rb) => {
     // Set parent
-    let parent = rb.id_parent < 0 ? base : bodies[rb.id_parent];
+    let parent = rb["id_parent"] < 0 ? base : bodies[rb["id_parent"]];
 
     // Create body
     let body = new THREE.Object3D();
-    body.quaternion.set(rb.quat.x, rb.quat.y, rb.quat.z, rb.quat.w);
-    body.position.fromArray(rb.pos);
+    const T_to_parent = rb["T_to_parent"];
+    const quat = T_to_parent["ori"];
+    body.quaternion.set(quat["x"], quat["y"], quat["z"], quat["w"]);
+    body.position.fromArray(T_to_parent["pos"]);
 
     // Find joint axis
     let axis;
@@ -67,7 +76,9 @@ export function create(model, loadCallback) {
     });
 
     // Add frame axes
-    body.add(Graphics.axes(AXIS_SIZE, AXIS_WIDTH));
+    let axes = Graphics.axes(AXIS_SIZE, AXIS_WIDTH);
+    axes.visible = false;//rb.id_parent < 0 || ee_ids.has(rb.id);
+    body.add(axes);
 
     // Add body to parent
     bodies.push(body);
@@ -114,4 +125,20 @@ export function updateQ(robot, val) {
   }
 
   return true;
+}
+
+export function updatePosition(robot, val) {
+  const pos = Redis.makeNumeric(val[0]);
+  robot.position.fromArray(pos);
+  return true;
+}
+
+export function updateOrientation(robot, val) {
+  const quat = Redis.makeNumeric(val[0]);
+  robot.quaternion.set(quat[0], quat[1], quat[2], quat[3]);
+  return true;
+}
+
+export function showAxes(robot, show) {
+  const spec = robot.redisgl;
 }

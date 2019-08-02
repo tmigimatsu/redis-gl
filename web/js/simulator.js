@@ -20,6 +20,7 @@ var KEY_INTERACTION   = "webapp::simulator::interaction";
 var KEY_CAMERA_POS    = "webapp::simulator::camera::pos";
 var KEY_CAMERA_TARGET = "webapp::simulator::camera::target";
 var KEY_TRAJ_RESET    = "webapp::simulator::trajectory::reset";
+var KEY_AXES_VISIBLE  = "webapp::simulator::axes::visible";
 
 var SCHEMA_ARGS = {
   key_cameras_prefix: "",
@@ -52,7 +53,6 @@ $(document).ready(function() {
   });
 
   let camera, scene, renderer, raycaster, controls;
-  let args = null;
 
   let interaction = {
     key_object: "",
@@ -65,6 +65,7 @@ $(document).ready(function() {
   let lineMouseDrag = null;
 
   let redisUpdateCallbacks = {};
+  let args = {};
   let robots = {};
   let objects = {};
   let trajectories = {};
@@ -100,6 +101,11 @@ $(document).ready(function() {
     redisUpdateCallbacks[key][keyComponent] = (val) => {
       return updateCallback(component, val);
     };
+    // Run callback immediately if key already exists
+    if (Redis.formExists(key)) {
+      // TODO: Write get value string function
+      updateCallback(component, Redis.getValue(key));
+    }
   }
 
   function unregisterRedisUpdateCallback(keyComponent) {
@@ -110,15 +116,42 @@ $(document).ready(function() {
   }
 
   function parseArgs(keyVals) {
-    // Skip if args already parsed
-    if (args !== null) return true;
+    for (const key in keyVals) {
+      const regex = new RegExp("^" + KEY_ARGS + "::(.*)$");
+      const matches = regex.exec(key);
+      if (matches === null) continue;
+      const namespace = matches[1];
 
-    // Quit if args unavailable
-    if (!(KEY_ARGS in keyVals)) return false;
+      try {
+        args[namespace] = JSON.parse(keyVals[key]);
+      } catch (error) {
+        console.error(error);
+        console.error("Failed to parse args " + key + ":\n" + keyVals[key]);
+        continue;
+      }
 
-    // Parse args
-    args = JSON.parse(keyVals[KEY_ARGS]);
-    return true;
+      console.log("New args: " + key);
+
+      // Load already existing models
+      Redis.getKeys().forEach((key) => {
+        let parseModelFunction;
+        if (key.startsWith(args[namespace]["key_cameras_prefix"])) {
+          parseModelFunction = parseCameraModel;
+        } else if (key.startsWith(args[namespace]["key_objects_prefix"])) {
+          parseModelFunction = parseObjectModel;
+        } else if (key.startsWith(args[namespace]["key_robots_prefix"])) {
+          parseModelFunction = parseRobotModel;
+        } else if (key.startsWith(args[namespace]["key_trajectories_prefix"])) {
+          parseModelFunction = parseTrajectoryModel;
+        } else {
+          return;
+        }
+        const val = Redis.getValue(key);
+        parseModelFunction(key, val);
+      });
+    }
+
+    return Object.keys(args).length;
   }
 
   function parseModels(keyVals) {
@@ -139,15 +172,23 @@ $(document).ready(function() {
         console.error("Failed to parse model " + key + ":\n" + val);
         return false;
       }
+      console.log(keyVals);
 
       // Update html
       Redis.updateForm(key, val, true, true, true);
     }
   }
 
+  function isModelKey(key, keyPrefix) {
+    for (const modelKeys in args) {
+      if (args[modelKeys][keyPrefix] !== "" &&
+          key.startsWith(args[modelKeys][keyPrefix])) return true;
+    }
+    return false;
+  }
+
   function parseRobotModel(key, val) {
-    if (args["key_robots_prefix"] === "" ||
-        !key.startsWith(args["key_robots_prefix"])) return false;
+    if (!isModelKey(key, "key_robots_prefix")) return false;
 
     // Parse robot model
     const model = JSON.parse(val);
@@ -157,12 +198,14 @@ $(document).ready(function() {
       updateInteraction(key, robot.redisgl.bodies);
       return renderFrame;
     });
+    registerRedisUpdateCallback(model["key_pos"], key, robots[key], Robot.updatePosition);
+    registerRedisUpdateCallback(model["key_ori"], key, robots[key], Robot.updateOrientation);
+    console.log("New robot: " + key);
     return true;
   }
 
   function parseObjectModel(key, val) {
-    if (args["key_objects_prefix"] === "" ||
-        !key.startsWith(args["key_objects_prefix"])) return false;
+    if (!isModelKey(key, "key_objects_prefix")) return false;
 
     const model = JSON.parse(val);
     addComponentToScene(GraphicsObject, objects, key, model);
@@ -176,23 +219,23 @@ $(document).ready(function() {
       updateInteraction(key, object);
       return renderFrame;
     });
+    console.log("New object: " + key);
     return true;
   }
 
   function parseTrajectoryModel(key, val) {
-    if (args["key_trajectories_prefix"] === "" ||
-        !key.startsWith(args["key_trajectories_prefix"])) return false;
+    if (!isModelKey(key, "key_trajectories_prefix")) return false;
 
     // Parse object model
     const model = JSON.parse(val);
     addComponentToScene(Trajectory, trajectories, key, model);
     registerRedisUpdateCallback(model["key_pos"], key, trajectories[key], Trajectory.appendPosition);
+    console.log("New trajectory: " + key);
     return true;
   }
 
   function parseCameraModel(key, val) {
-    if (args["key_cameras_prefix"] === "" || 
-        !key.startsWith(args["key_cameras_prefix"])) return false;
+    if (!isModelKey(key, "key_cameras_prefix")) return false;
 
     // Parse object model
     const model = JSON.parse(val);
@@ -201,6 +244,7 @@ $(document).ready(function() {
     registerRedisUpdateCallback(model["key_ori"], key, cameras[key], Camera.updateOrientation);
     registerRedisUpdateCallback(model["key_intrinsic"], key, cameras[key], Camera.updateIntrinsic);
     registerRedisUpdateCallback(model["key_depth_image"], key, cameras[key], Camera.updateDepthImage);
+    console.log("New camera: " + key);
     return true;
   }
 
@@ -504,6 +548,13 @@ $(document).ready(function() {
         Trajectory.reset(trajectories[key]);
       }
       renderer.render(scene, camera);
+    });
+    Redis.addForm(KEY_AXES_VISIBLE, [[0]], true, false, false, (key, val) => {
+      if (val[0][0] === 0) {
+        console.log("Hide axes");
+      } else {
+        console.log("Show axes");
+      }
     });
 
     var grid = new THREE.GridHelper(1, 10);
