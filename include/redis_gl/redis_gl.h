@@ -38,7 +38,6 @@ const std::string KEY_INTERACTION = KEY_PREFIX + "interaction";    // webapp::si
 const std::string KEY_RESOURCES = webapp::KEY_RESOURCES_PREFIX + kName;  // webapp::resources::simulator
 
 struct ModelKeys {
-
   ModelKeys() = default;
   ModelKeys(const std::string& key_namespace)
       : key_namespace(key_namespace),
@@ -52,8 +51,79 @@ struct ModelKeys {
   std::string key_objects_prefix;
   std::string key_trajectories_prefix;
   std::string key_cameras_prefix;
-
 };
+
+struct ObjectModel {
+  std::string name;
+  std::vector<spatial_dyn::Graphics> graphics;
+  std::string key_pos;
+  std::string key_ori;
+};
+
+inline void from_json(const nlohmann::json& json, ObjectModel& object) {
+  object.name = json.at("name").get<std::string>();
+  object.graphics = json.at("graphics").get<std::vector<spatial_dyn::Graphics>>();
+  object.key_pos = json.at("key_pos").get<std::string>();
+  object.key_ori = json.at("key_ori").get<std::string>();
+}
+
+inline void to_json(nlohmann::json& json, const ObjectModel& object) {
+  json["name"] = object.name;
+  json["graphics"] = object.graphics;
+  json["key_pos"] = object.key_pos;
+  json["key_ori"] = object.key_ori;
+}
+
+inline std::stringstream& operator<<(std::stringstream& ss, const ObjectModel& object) {
+  ss << nlohmann::json(object).dump();
+  return ss;
+}
+
+inline std::stringstream& operator>>(std::stringstream& ss, ObjectModel& object) {
+  nlohmann::json json = nlohmann::json::parse(ss.str());
+  ss.seekg(ss.str().size());
+  object = json.get<ObjectModel>();
+  return ss;
+}
+
+struct CameraModel {
+  std::string name;
+  std::string key_pos;
+  std::string key_ori;
+  std::string key_intrinsic;
+  std::string key_depth_image;
+  std::string key_rgb_image;
+};
+
+inline void from_json(const nlohmann::json& json, CameraModel& camera) {
+  camera.name = json.at("name").get<std::string>();
+  camera.key_pos = json.at("key_pos").get<std::string>();
+  camera.key_ori = json.at("key_ori").get<std::string>();
+  camera.key_intrinsic = json.at("key_intrinsic").get<std::string>();
+  camera.key_depth_image = json.at("key_depth_image").get<std::string>();
+  camera.key_rgb_image = json.at("key_rgb_image").get<std::string>();
+}
+
+inline void to_json(nlohmann::json& json, const CameraModel& camera) {
+  json["name"] = camera.name;
+  json["key_pos"] = camera.key_pos;
+  json["key_ori"] = camera.key_ori;
+  json["key_intrinsic"] = camera.key_intrinsic;
+  json["key_depth_image"] = camera.key_depth_image;
+  json["key_rgb_image"] = camera.key_rgb_image;
+}
+
+inline std::stringstream& operator<<(std::stringstream& ss, const CameraModel& object) {
+  ss << nlohmann::json(object).dump();
+  return ss;
+}
+
+inline std::stringstream& operator>>(std::stringstream& ss, CameraModel& object) {
+  nlohmann::json json = nlohmann::json::parse(ss.str());
+  ss.seekg(ss.str().size());
+  object = json.get<CameraModel>();
+  return ss;
+}
 
 struct Interaction {
 
@@ -74,7 +144,7 @@ struct Interaction {
 
 };
 
-void from_json(const nlohmann::json& json, Interaction::Key& key) {
+inline void from_json(const nlohmann::json& json, Interaction::Key& key) {
   std::string str_key = json.get<std::string>();
   if (str_key == "alt") key = Interaction::Key::kAlt;
   else if (str_key == "ctrl") key = Interaction::Key::kCtrl;
@@ -83,7 +153,7 @@ void from_json(const nlohmann::json& json, Interaction::Key& key) {
   else key = Interaction::Key::kUndefined;
 }
 
-void from_json(const nlohmann::json& json, Interaction& interaction) {
+inline void from_json(const nlohmann::json& json, Interaction& interaction) {
   interaction.key_object = json["key_object"].get<std::string>();
   interaction.idx_link = json["idx_link"].get<int>();
   const std::array<double, 3> pos_click_in_link = json["pos_click_in_link"].get<std::array<double, 3>>();
@@ -94,7 +164,7 @@ void from_json(const nlohmann::json& json, Interaction& interaction) {
   interaction.key_down = json["key_down"].get<std::string>();
 }
 
-std::stringstream& operator>>(std::stringstream& ss, Interaction& interaction) {
+inline std::stringstream& operator>>(std::stringstream& ss, Interaction& interaction) {
   nlohmann::json json;
   ss >> json;
   interaction = json.get<Interaction>();
@@ -111,21 +181,21 @@ std::stringstream& operator>>(std::stringstream& ss, Interaction& interaction) {
  * @param path Absolute path for the resources directory
  * @param commit Commit the hset command (asynchronously).
  */
-void RegisterResourcePath(ctrl_utils::RedisClient& redis,
+inline void RegisterResourcePath(ctrl_utils::RedisClient& redis,
                           const std::string& path,
                           bool commit = false) {
   redis.sadd(KEY_RESOURCES, { path });
   if (commit) redis.commit();
 }
 
-void UnregisterResourcePath(ctrl_utils::RedisClient& redis,
+inline void UnregisterResourcePath(ctrl_utils::RedisClient& redis,
                             const std::string& path,
                             bool commit = false) {
   redis.srem(KEY_RESOURCES, { path });
   if (commit) redis.commit();
 }
 
-void RegisterModelKeys(ctrl_utils::RedisClient& redis,
+inline void RegisterModelKeys(ctrl_utils::RedisClient& redis,
                        const ModelKeys& model_keys,
                        bool commit = false) {
   nlohmann::json args;
@@ -137,14 +207,14 @@ void RegisterModelKeys(ctrl_utils::RedisClient& redis,
   if (commit) redis.commit();
 }
 
-void UnregisterModelKeys(ctrl_utils::RedisClient& redis,
+inline void UnregisterModelKeys(ctrl_utils::RedisClient& redis,
                          const ModelKeys& model_keys,
                          bool commit = false) {
   redis.del({ KEY_ARGS + "::" + model_keys.key_namespace });
   if (commit) redis.commit();
 }
 
-void RegisterRobot(ctrl_utils::RedisClient& redis,
+inline void RegisterRobot(ctrl_utils::RedisClient& redis,
                    const ModelKeys& model_keys,
                    const spatial_dyn::ArticulatedBody& ab,
                    const std::string& key_q,
@@ -160,7 +230,7 @@ void RegisterRobot(ctrl_utils::RedisClient& redis,
   if (commit) redis.commit();
 }
 
-void RegisterObject(ctrl_utils::RedisClient& redis,
+inline void RegisterObject(ctrl_utils::RedisClient& redis,
                     const ModelKeys& model_keys,
                     const std::string& name,
                     const std::vector<spatial_dyn::Graphics>& graphics,
@@ -175,7 +245,7 @@ void RegisterObject(ctrl_utils::RedisClient& redis,
   if (commit) redis.commit();
 }
 
-void RegisterObject(ctrl_utils::RedisClient& redis,
+inline void RegisterObject(ctrl_utils::RedisClient& redis,
                     const ModelKeys& model_keys,
                     const spatial_dyn::Graphics& graphics,
                     const std::string& key_pos,
@@ -189,7 +259,15 @@ void RegisterObject(ctrl_utils::RedisClient& redis,
   if (commit) redis.commit();
 }
 
-void RegisterTrajectory(ctrl_utils::RedisClient& redis,
+inline void RegisterObject(ctrl_utils::RedisClient& redis,
+                    const ModelKeys& model_keys,
+                    const ObjectModel& object,
+                    bool commit = false) {
+  nlohmann::json json(object);
+  redis.set(model_keys.key_objects_prefix + object.name, json);
+}
+
+inline void RegisterTrajectory(ctrl_utils::RedisClient& redis,
                         const ModelKeys& model_keys,
                         const std::string& name,
                         const std::string& key_pos,
@@ -200,7 +278,7 @@ void RegisterTrajectory(ctrl_utils::RedisClient& redis,
   if (commit) redis.commit();
 }
 
-void RegisterCamera(ctrl_utils::RedisClient& redis,
+inline void RegisterCamera(ctrl_utils::RedisClient& redis,
                     const ModelKeys& model_keys,
                     const std::string& name,
                     const std::string& key_pos,
@@ -216,6 +294,15 @@ void RegisterCamera(ctrl_utils::RedisClient& redis,
   model["key_depth_image"] = key_depth_image;
   model["key_rgb_image"] = key_rgb_image;
   redis.set(model_keys.key_cameras_prefix + name, model);
+  if (commit) redis.commit();
+}
+
+inline void RegisterCamera(ctrl_utils::RedisClient& redis,
+                    const ModelKeys& model_keys,
+                    const CameraModel& camera,
+                    bool commit = false) {
+  nlohmann::json json(camera);
+  redis.set(model_keys.key_cameras_prefix + camera.name, json);
   if (commit) redis.commit();
 }
 

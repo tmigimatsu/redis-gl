@@ -95,6 +95,7 @@ $(document).ready(function() {
   };
 
   function registerRedisUpdateCallback(key, keyComponent, component, updateCallback) {
+    if (key === "") return;
     if (!(key in redisUpdateCallbacks)) {
       redisUpdateCallbacks[key] = [];
     }
@@ -103,7 +104,6 @@ $(document).ready(function() {
     };
     // Run callback immediately if key already exists
     if (Redis.formExists(key)) {
-      // TODO: Write get value string function
       updateCallback(component, Redis.getValue(key));
     }
   }
@@ -111,7 +111,7 @@ $(document).ready(function() {
   function unregisterRedisUpdateCallback(keyComponent) {
     for (const key in redisUpdateCallbacks) {
       if (!(keyComponent in redisUpdateCallbacks[key])) continue;
-      redisUpdateCallbacks[key].delete(keyComponent);
+      delete redisUpdateCallbacks[key][keyComponent];
     }
   }
 
@@ -300,7 +300,7 @@ $(document).ready(function() {
         renderFrame = true;
       } else if (key in objects) {
         scene.remove(objects[key]);
-        objects.delete(key);
+        delete objects[key];
         unregisterRedisUpdateCallback(key);
         renderFrame = true;
       }
