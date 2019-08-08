@@ -295,7 +295,7 @@ $(document).ready(function() {
     keys.forEach((key) => {
       if (key in robots) {
         scene.remove(robots[key]);
-        robots.delete(key);
+        delete robots[key];
         unregisterRedisUpdateCallback(key);
         renderFrame = true;
       } else if (key in objects) {

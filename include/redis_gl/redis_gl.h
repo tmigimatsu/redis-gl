@@ -19,6 +19,7 @@
 
 #include <spatial_dyn/parsers/json.h>
 #include <spatial_dyn/structs/articulated_body.h>
+#include <spatial_dyn/algorithms/forward_kinematics.h>
 
 namespace redis_gl {
 
@@ -125,6 +126,40 @@ inline std::stringstream& operator>>(std::stringstream& ss, CameraModel& object)
   return ss;
 }
 
+struct RobotModel {
+  std::shared_ptr<spatial_dyn::ArticulatedBody> articulated_body;
+  std::string key_q;
+  std::string key_pos;
+  std::string key_ori;
+};
+
+inline void from_json(const nlohmann::json& json, RobotModel& robot) {
+  robot.articulated_body = std::make_shared<spatial_dyn::ArticulatedBody>(
+      json.at("articulated_body").get<spatial_dyn::ArticulatedBody>());
+  robot.key_q = json.at("key_q").get<std::string>();
+  robot.key_pos = json.at("key_pos").get<std::string>();
+  robot.key_ori = json.at("key_ori").get<std::string>();
+}
+
+inline void to_json(nlohmann::json& json, const RobotModel& robot) {
+  json["articulated_body"] = *robot.articulated_body;
+  json["key_q"] = robot.key_q;
+  json["key_pos"] = robot.key_pos;
+  json["key_ori"] = robot.key_ori;
+}
+
+inline std::stringstream& operator<<(std::stringstream& ss, const RobotModel& object) {
+  ss << nlohmann::json(object).dump();
+  return ss;
+}
+
+inline std::stringstream& operator>>(std::stringstream& ss, RobotModel& object) {
+  nlohmann::json json = nlohmann::json::parse(ss.str());
+  ss.seekg(ss.str().size());
+  object = json.get<RobotModel>();
+  return ss;
+}
+
 struct Interaction {
 
   enum class Key {
@@ -143,6 +178,98 @@ struct Interaction {
   std::string key_down;
 
 };
+
+inline Eigen::Vector3d ClickPositionAdjustment(const redis_gl::simulator::Interaction& interaction,
+                                               const Eigen::Vector3d& pos,
+                                               const Eigen::Quaterniond& quat,
+                                               double gain = 1e-2) {
+  const Eigen::Isometry3d T_object_to_world = Eigen::Translation3d(pos) * quat;
+  const Eigen::Vector3d pos_click_in_world = T_object_to_world * interaction.pos_click_in_link;
+
+  return gain * (interaction.pos_mouse_in_world - pos_click_in_world);
+}
+
+inline Eigen::AngleAxisd ClickOrientationAdjustment(const redis_gl::simulator::Interaction& interaction,
+                                                    const Eigen::Vector3d& pos,
+                                                    const Eigen::Quaterniond& quat,
+                                                    double gain = 1e-1) {
+  const Eigen::Isometry3d T_object_to_world = Eigen::Translation3d(pos) * quat;
+  const Eigen::Vector3d pos_click_in_world = T_object_to_world * interaction.pos_click_in_link;
+
+  const Eigen::Vector3d m_click = gain * (interaction.pos_mouse_in_world - pos_click_in_world);
+  const Eigen::Vector3d r_com = (pos_click_in_world - T_object_to_world.translation()).normalized();
+  const Eigen::Vector3d r_com_x_m_click = r_com.cross(m_click);
+  return Eigen::AngleAxisd(r_com_x_m_click.norm(), r_com_x_m_click.normalized());
+}
+
+inline void ClickAdjustPose(const redis_gl::simulator::Interaction& interaction,
+                            Eigen::Vector3d* pos, Eigen::Quaterniond* ori,
+                            double gain_pos = 1e-2, double gain_ori = 1e-1) {
+  if (interaction.modifier_keys.find(redis_gl::simulator::Interaction::Key::kCtrl) !=
+      interaction.modifier_keys.end()) {
+    *ori = ClickOrientationAdjustment(interaction, *pos, *ori, gain_ori) * *ori;
+  } else {
+    *pos += ClickPositionAdjustment(interaction, *pos, *ori, gain_pos);
+  }
+}
+
+inline std::map<size_t, spatial_dyn::SpatialForced>
+ComputeExternalForces(const redis_gl::simulator::ModelKeys& model_keys,
+                      const spatial_dyn::ArticulatedBody& ab,
+                      const redis_gl::simulator::Interaction& interaction,
+                      double gain = 100.) {
+  std::map<size_t, spatial_dyn::SpatialForced> f_ext;
+
+  // Check if the clicked object is the robot
+  if (interaction.key_object != model_keys.key_robots_prefix + ab.name) return f_ext;
+
+  // Get the click position in world coordinates
+  const Eigen::Vector3d pos_click_in_world = spatial_dyn::Position(ab, interaction.idx_link,
+                                                                   interaction.pos_click_in_link);
+
+  // Set the click force
+  const Eigen::Vector3d f = gain * (interaction.pos_mouse_in_world - pos_click_in_world);
+  spatial_dyn::SpatialForced f_click(f, Eigen::Vector3d::Zero());
+
+  // Translate the spatial force to the world frame
+  f_ext[interaction.idx_link] = Eigen::Translation3d(pos_click_in_world) * f_click;
+
+  return f_ext;
+}
+
+inline Eigen::Vector3d KeypressPositionAdjustment(const Interaction& interaction, double gain) {
+  if (interaction.key_down.empty()) return Eigen::Vector3d::Zero();
+
+  size_t idx = 0;
+  int sign = 1;
+  switch (interaction.key_down[0]) {
+    case 'a': idx = 0; sign = -1; break;
+    case 'd': idx = 0; sign = 1; break;
+    case 'w': idx = 1; sign = 1; break;
+    case 's': idx = 1; sign = -1; break;
+    case 'e': idx = 2; sign = 1; break;
+    case 'q': idx = 2; sign = -1; break;
+    default: return Eigen::Vector3d::Zero();
+  }
+  return gain * Eigen::Vector3d::Unit(idx);
+}
+
+inline Eigen::AngleAxisd KeypressOrientationAdjustment(const Interaction& interaction, double gain) {
+  if (interaction.key_down.empty()) return Eigen::AngleAxisd::Identity();
+
+  size_t idx = 0;
+  int sign = 1;
+  switch (interaction.key_down[0]) {
+    case 'j': idx = 0; sign = -1; break;
+    case 'l': idx = 0; sign = 1; break;
+    case 'i': idx = 1; sign = 1; break;
+    case 'k': idx = 1; sign = -1; break;
+    case 'o': idx = 2; sign = 1; break;
+    case 'u': idx = 2; sign = -1; break;
+    default: return Eigen::AngleAxisd::Identity();
+  }
+  return Eigen::AngleAxisd(sign * gain, Eigen::Vector3d::Unit(idx));
+}
 
 inline void from_json(const nlohmann::json& json, Interaction::Key& key) {
   std::string str_key = json.get<std::string>();
@@ -182,22 +309,22 @@ inline std::stringstream& operator>>(std::stringstream& ss, Interaction& interac
  * @param commit Commit the hset command (asynchronously).
  */
 inline void RegisterResourcePath(ctrl_utils::RedisClient& redis,
-                          const std::string& path,
-                          bool commit = false) {
+                                 const std::string& path,
+                                 bool commit = false) {
   redis.sadd(KEY_RESOURCES, { path });
   if (commit) redis.commit();
 }
 
 inline void UnregisterResourcePath(ctrl_utils::RedisClient& redis,
-                            const std::string& path,
-                            bool commit = false) {
+                                   const std::string& path,
+                                   bool commit = false) {
   redis.srem(KEY_RESOURCES, { path });
   if (commit) redis.commit();
 }
 
 inline void RegisterModelKeys(ctrl_utils::RedisClient& redis,
-                       const ModelKeys& model_keys,
-                       bool commit = false) {
+                              const ModelKeys& model_keys,
+                              bool commit = false) {
   nlohmann::json args;
   args["key_robots_prefix"] = model_keys.key_robots_prefix;
   args["key_objects_prefix"] = model_keys.key_objects_prefix;
@@ -208,19 +335,28 @@ inline void RegisterModelKeys(ctrl_utils::RedisClient& redis,
 }
 
 inline void UnregisterModelKeys(ctrl_utils::RedisClient& redis,
-                         const ModelKeys& model_keys,
-                         bool commit = false) {
+                                const ModelKeys& model_keys,
+                                bool commit = false) {
   redis.del({ KEY_ARGS + "::" + model_keys.key_namespace });
   if (commit) redis.commit();
 }
 
 inline void RegisterRobot(ctrl_utils::RedisClient& redis,
-                   const ModelKeys& model_keys,
-                   const spatial_dyn::ArticulatedBody& ab,
-                   const std::string& key_q,
-                   const std::string& key_pos = "",
-                   const std::string& key_ori = "",
-                   bool commit = false) {
+                          const ModelKeys& model_keys,
+                          const RobotModel& robot,
+                          bool commit = false) {
+  nlohmann::json json(robot);
+  redis.set(model_keys.key_robots_prefix + robot.articulated_body->name, json);
+  if (commit) redis.commit();
+}
+
+inline void RegisterRobot(ctrl_utils::RedisClient& redis,
+                          const ModelKeys& model_keys,
+                          const spatial_dyn::ArticulatedBody& ab,
+                          const std::string& key_q,
+                          const std::string& key_pos = "",
+                          const std::string& key_ori = "",
+                          bool commit = false) {
   nlohmann::json model;
   model["articulated_body"] = ab;
   model["key_q"] = key_q;
@@ -279,14 +415,14 @@ inline void RegisterTrajectory(ctrl_utils::RedisClient& redis,
 }
 
 inline void RegisterCamera(ctrl_utils::RedisClient& redis,
-                    const ModelKeys& model_keys,
-                    const std::string& name,
-                    const std::string& key_pos,
-                    const std::string& key_ori,
-                    const std::string& key_intrinsic,
-                    const std::string& key_depth_image,
-                    const std::string& key_rgb_image = "",
-                    bool commit = false) {
+                           const ModelKeys& model_keys,
+                           const std::string& name,
+                           const std::string& key_pos,
+                           const std::string& key_ori,
+                           const std::string& key_intrinsic,
+                           const std::string& key_depth_image,
+                           const std::string& key_rgb_image = "",
+                           bool commit = false) {
   nlohmann::json model;
   model["key_pos"] = key_pos;
   model["key_ori"] = key_ori;
@@ -298,9 +434,9 @@ inline void RegisterCamera(ctrl_utils::RedisClient& redis,
 }
 
 inline void RegisterCamera(ctrl_utils::RedisClient& redis,
-                    const ModelKeys& model_keys,
-                    const CameraModel& camera,
-                    bool commit = false) {
+                           const ModelKeys& model_keys,
+                           const CameraModel& camera,
+                           bool commit = false) {
   nlohmann::json json(camera);
   redis.set(model_keys.key_cameras_prefix + camera.name, json);
   if (commit) redis.commit();

@@ -192,7 +192,7 @@ export function isNumeric(string) {
 }
 
 export function makeNumeric(arr) {
-  if (arr.length === 0) return arr;
+  if (typeof(arr) === "string" || arr.length === 0) return arr;
   if (typeof(arr[0]) === "string") {
     return arr.map(parseFloat);
   } else {
