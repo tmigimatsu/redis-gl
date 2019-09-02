@@ -237,7 +237,7 @@ ComputeExternalForces(const redis_gl::simulator::ModelKeys& model_keys,
   return f_ext;
 }
 
-inline Eigen::Vector3d KeypressPositionAdjustment(const Interaction& interaction, double gain) {
+inline Eigen::Vector3d KeypressPositionAdjustment(const Interaction& interaction, double gain = 1e-4) {
   if (interaction.key_down.empty()) return Eigen::Vector3d::Zero();
 
   size_t idx = 0;
@@ -251,10 +251,10 @@ inline Eigen::Vector3d KeypressPositionAdjustment(const Interaction& interaction
     case 'q': idx = 2; sign = -1; break;
     default: return Eigen::Vector3d::Zero();
   }
-  return gain * Eigen::Vector3d::Unit(idx);
+  return sign * gain * Eigen::Vector3d::Unit(idx);
 }
 
-inline Eigen::AngleAxisd KeypressOrientationAdjustment(const Interaction& interaction, double gain) {
+inline Eigen::AngleAxisd KeypressOrientationAdjustment(const Interaction& interaction, double gain = 1e-3) {
   if (interaction.key_down.empty()) return Eigen::AngleAxisd::Identity();
 
   size_t idx = 0;

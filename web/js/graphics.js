@@ -54,6 +54,8 @@ export function parse(graphicsStruct, body, promises) {
   const materialStruct = graphicsStruct["material"];
   const type = geometryStruct["type"];
 
+  if (materialStruct["rgba"][3] == 0.) return;
+
   if (type == "mesh") {
 
     const meshFilename = geometryStruct["mesh"];
