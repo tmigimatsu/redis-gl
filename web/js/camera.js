@@ -94,6 +94,7 @@ export function updateDepthImage(camera, opencv_mat) {
     geometry.addAttribute("position", new THREE.Float32BufferAttribute(buffer, 3));
     geometry.attributes.position.dynamic = true;
     geometry.setDrawRange(0, 0);
+    points.frustumCulled = false;
   }
 
   // Update specs
