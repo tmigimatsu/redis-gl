@@ -101,11 +101,24 @@ class RedisMonitor:
 
         return val
 
+    def _initialize_redis_keys(self):
+        import json
+        interaction = {
+            "key_object": "",
+            "idx_link": 0,
+            "pos_click_in_link": [0,0,0],
+            "pos_mouse_in_world": [0,0,0],
+            "modifier_keys": [],
+            "key_down": ""
+        }
+        self.redis_db.set("webapp::simulator::interaction", json.dumps(interaction))
+
     def run_forever(self, ws_server):
         """
         Listen for redis keys (either realtime or every refresh_rate seconds)
         and send updated values to all web socket clients every refresh_rate seconds.
         """
+        self._initialize_redis_keys()
         if not self.realtime:
             # Send messages to clients every refresh_rate seconds
             prev_keys = set()
