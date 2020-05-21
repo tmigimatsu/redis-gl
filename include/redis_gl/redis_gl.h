@@ -10,6 +10,7 @@
 #ifndef REDIS_GL_REDIS_GL_H_
 #define REDIS_GL_REDIS_GL_H_
 
+#include <array>    // std::array
 #include <set>      // std::set
 #include <sstream>  // std::stringstream
 #include <string>   // std::string
@@ -338,6 +339,25 @@ inline void UnregisterModelKeys(ctrl_utils::RedisClient& redis,
                                 const ModelKeys& model_keys,
                                 bool commit = false) {
   redis.del({ KEY_ARGS + "::" + model_keys.key_namespace });
+  if (commit) redis.commit();
+}
+
+inline void ClearModelKeys(ctrl_utils::RedisClient& redis,
+                           const ModelKeys& model_keys,
+                           bool commit = true) {
+  std::array<std::future<std::unordered_set<std::string>>, 4> fut_keys = {
+    redis.scan(model_keys.key_robots_prefix + "*"),
+    redis.scan(model_keys.key_objects_prefix + "*"),
+    redis.scan(model_keys.key_trajectories_prefix + "*"),
+    redis.scan(model_keys.key_cameras_prefix + "*"),
+  };
+  redis.commit();
+  for (auto& fut_keys_batch: fut_keys) {
+    const auto keys_batch = fut_keys_batch.get();
+    std::vector<std::string> keys;
+    keys.insert(keys.end(), keys_batch.begin(), keys_batch.end());
+    redis.del(keys);
+  }
   if (commit) redis.commit();
 }
 

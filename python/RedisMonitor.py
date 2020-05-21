@@ -127,20 +127,24 @@ class RedisMonitor:
 
                 key_vals = []
                 new_keys = set()
-                for key in self.redis_db.scan_iter():
+                keys = [key for key in self.redis_db.scan_iter()]
+                for key in keys:
                     if self.redis_db.type(key) != b"string":
                         continue
-                    new_keys.add(key.decode("utf-8"))
+                    key = key.decode("utf-8")
+                    new_keys.add(key)
 
                     val = self.parse_val(key)
                     if val is None:
                         continue
-                    key_vals.append((key.decode("utf-8"), val))
+                    key_vals.append((key, val))
 
                 del_keys = list(prev_keys - new_keys)
                 prev_keys = new_keys
                 if not key_vals and not del_keys:
                     continue
+                for key in del_keys:
+                    self.message_last.pop(key, None)
 
                 ws_server.lock.acquire()
                 for client in ws_server.clients:

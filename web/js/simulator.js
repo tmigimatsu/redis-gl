@@ -250,6 +250,7 @@ $(document).ready(function() {
 
   function addComponentToScene(Component, components, key, model) {
     let component = Component.create(model, (component) => {
+      if (!(key in components) || components[key] != component) return;
       scene.add(component);
       renderer.render(scene, camera);
     });
@@ -257,6 +258,7 @@ $(document).ready(function() {
     // Delete old component
     if (key in components) {
       scene.remove(components[key]);
+      delete components[key];
     }
     components[key] = component;
   }
