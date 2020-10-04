@@ -11,7 +11,12 @@ import sys
 import os
 import mimetypes
 
-if sys.version.startswith("3"):
+if sys.version_info >= (3,2):
+    from urllib.parse import parse_qs
+else:
+    from cgi import parse_qs
+
+if sys.version_info >= (3,):
     from http.server import BaseHTTPRequestHandler
 else:
     from BaseHTTPServer import BaseHTTPRequestHandler
@@ -99,7 +104,7 @@ def makeHTTPRequestHandler(get_callback=None, post_callback=None, callback_args=
                 post_vars = cgi.parse_multipart(self.rfile, parse_dict)
             elif content_type == "application/x-www-form-urlencoded":
                 content_length = int(self.headers["Content-Length"])
-                post_vars = cgi.parse_qs(self.rfile.read(content_length), keep_blank_values=1)
+                post_vars = parse_qs(self.rfile.read(content_length), keep_blank_values=1)
             else:
                 post_vars = {}
 
