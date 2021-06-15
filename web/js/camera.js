@@ -168,7 +168,7 @@ function renderCameraViewFrame(camera) {
     geometry.vertices[1].copy(corner2);
     geometry.verticesNeedUpdate = true;
   }
-  
+
   return true;
 }
 

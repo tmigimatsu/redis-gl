@@ -7,7 +7,7 @@ class RedisMonitor:
     Monitor Redis keys and send updates to all web socket clients.
     """
 
-    def __init__(self, host="localhost", port=6379, db=0, refresh_rate=0.5, key_filter="", realtime=False):
+    def __init__(self, host="localhost", port=6379, password="", db=0, refresh_rate=0.5, key_filter="", realtime=False):
         """
         If realtime is specified, RedisMonitor will enable notifications for all
         set events and subscribe to these notifications.
@@ -15,12 +15,13 @@ class RedisMonitor:
 
         self.host = host
         self.port = port
+        self.password = password
         self.db = db
         self.refresh_rate = refresh_rate
         self.key_filter = key_filter
         self.realtime = realtime
 
-        self.redis_db = redis.Redis(host=self.host, port=self.port, db=self.db, decode_responses=False)
+        self.redis_db = redis.Redis(host=self.host, port=self.port, password=self.password, db=self.db, decode_responses=False)
         self.message_last = {}
 
         if self.realtime:

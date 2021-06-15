@@ -148,6 +148,7 @@ if __name__ == "__main__":
     parser.add_argument("-wp", "--ws_port", help="WebSocket port (default: 8001)", default=8001, type=int)
     parser.add_argument("-rh", "--redis_host", help="Redis hostname (default: 127.0.0.1)", default="127.0.0.1")
     parser.add_argument("-rp", "--redis_port", help="Redis port (default: 6379)", default=6379, type=int)
+    parser.add_argument("-ra", "--redis_pass", help="Redis password (default: '')", default='', type=str)
     parser.add_argument("-rd", "--redis_db", help="Redis database number (default: 0)", default=0, type=int)
     parser.add_argument("-r", "--refresh_rate", help="Redis refresh rate in seconds (default: 0.05)", default=0.05, type=float)
     parser.add_argument("-kf", "--key_filter", help="Regex filter for Redis keys to monitor (default: \"\")", default="", type=str)
@@ -156,7 +157,7 @@ if __name__ == "__main__":
 
     # Create RedisMonitor, HTTPServer, and WebSocketServer
     print("Starting up server...\n")
-    redis_monitor = RedisMonitor(host=args.redis_host, port=args.redis_port, db=args.redis_db,
+    redis_monitor = RedisMonitor(host=args.redis_host, port=args.redis_port, password=args.redis_pass, db=args.redis_db,
                                  refresh_rate=args.refresh_rate, key_filter=args.key_filter, realtime=args.realtime)
     print("Connected to Redis database at %s:%d (db %d)" % (args.redis_host, args.redis_port, args.redis_db))
     get_post_args = {"ws_port": args.ws_port, "redis_db": redis_monitor.redis_db}

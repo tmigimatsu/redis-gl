@@ -7,6 +7,6 @@ url = "https://pypi.org/simple"
 redis = "*"
 
 [requires]
-python_version = "3.5"
+python_version = "3"
 
 [dev-packages]
