@@ -64,7 +64,7 @@ struct CameraModel {
   std::string key_ori;
   std::string key_intrinsic;
   std::string key_depth_image;
-  std::string key_rgb_image;
+  std::string key_color_image;
 };
 
 inline void from_json(const nlohmann::json& json, CameraModel& camera) {
@@ -73,7 +73,7 @@ inline void from_json(const nlohmann::json& json, CameraModel& camera) {
   camera.key_ori = json.at("key_ori").get<std::string>();
   camera.key_intrinsic = json.at("key_intrinsic").get<std::string>();
   camera.key_depth_image = json.at("key_depth_image").get<std::string>();
-  camera.key_rgb_image = json.at("key_rgb_image").get<std::string>();
+  camera.key_color_image = json.at("key_color_image").get<std::string>();
 }
 
 inline void to_json(nlohmann::json& json, const CameraModel& camera) {
@@ -82,7 +82,7 @@ inline void to_json(nlohmann::json& json, const CameraModel& camera) {
   json["key_ori"] = camera.key_ori;
   json["key_intrinsic"] = camera.key_intrinsic;
   json["key_depth_image"] = camera.key_depth_image;
-  json["key_rgb_image"] = camera.key_rgb_image;
+  json["key_color_image"] = camera.key_color_image;
 }
 
 inline std::stringstream& operator<<(std::stringstream& ss,
@@ -340,14 +340,14 @@ inline void RegisterCamera(ctrl_utils::RedisClient& redis,
                            const std::string& key_ori,
                            const std::string& key_intrinsic,
                            const std::string& key_depth_image,
-                           const std::string& key_rgb_image = "",
+                           const std::string& key_color_image = "",
                            bool commit = false) {
   nlohmann::json model;
   model["key_pos"] = key_pos;
   model["key_ori"] = key_ori;
   model["key_intrinsic"] = key_intrinsic;
   model["key_depth_image"] = key_depth_image;
-  model["key_rgb_image"] = key_rgb_image;
+  model["key_color_image"] = key_color_image;
   redis.set(model_keys.key_cameras_prefix + name, model);
   if (commit) redis.commit();
 }
