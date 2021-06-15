@@ -1307,8 +1307,7 @@ THREE.EXRLoader.prototype = Object.assign( Object.create( THREE.DataTextureLoade
 		var width = EXRHeader.dataWindow.xMax - EXRHeader.dataWindow.xMin + 1;
 		var height = EXRHeader.dataWindow.yMax - EXRHeader.dataWindow.yMin + 1;
 		// Firefox only supports RGBA (half) float textures
-		// var numChannels = EXRHeader.channels.length;
-		var numChannels = 4;
+		var numChannels = EXRHeader.channels.length;
 		var size = width * height * numChannels;
 
 		// Fill initially with 1s for the alpha value if the texture is not RGBA, RGB values will be overwritten
@@ -1349,7 +1348,8 @@ THREE.EXRLoader.prototype = Object.assign( Object.create( THREE.DataTextureLoade
 			R: 0,
 			G: 1,
 			B: 2,
-			A: 3
+			A: 3,
+			Y: 0,
 		};
 
 		var compressionInfo = {

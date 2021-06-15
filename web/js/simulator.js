@@ -99,12 +99,13 @@ $(document).ready(function() {
     if (!(key in redisUpdateCallbacks)) {
       redisUpdateCallbacks[key] = [];
     }
+    let renderCallback = () => { renderer.render(scene, camera); };
     redisUpdateCallbacks[key][keyComponent] = (val) => {
-      return updateCallback(component, val);
+      return updateCallback(component, val, renderCallback);
     };
     // Run callback immediately if key already exists
     if (Redis.formExists(key)) {
-      updateCallback(component, Redis.getValue(key));
+      updateCallback(component, Redis.getValue(key), renderCallback);
     }
   }
 
@@ -244,6 +245,7 @@ $(document).ready(function() {
     registerRedisUpdateCallback(model["key_ori"], key, cameras[key], Camera.updateOrientation);
     registerRedisUpdateCallback(model["key_intrinsic"], key, cameras[key], Camera.updateIntrinsic);
     registerRedisUpdateCallback(model["key_depth_image"], key, cameras[key], Camera.updateDepthImage);
+    registerRedisUpdateCallback(model["key_color_image"], key, cameras[key], Camera.updateColorImage);
     console.log("New camera: " + key);
     return true;
   }
@@ -251,7 +253,6 @@ $(document).ready(function() {
   function addComponentToScene(Component, components, key, model) {
     let component = Component.create(model, (component) => {
       if (!(key in components) || components[key] != component) return;
-      scene.add(component);
       renderer.render(scene, camera);
     });
 
@@ -261,6 +262,9 @@ $(document).ready(function() {
       delete components[key];
     }
     components[key] = component;
+
+    scene.add(component);
+    renderer.render(scene, camera);
   }
 
   function parseUpdateKeys(keyVals) {
