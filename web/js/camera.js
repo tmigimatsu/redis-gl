@@ -182,7 +182,11 @@ function parseOpenCvMat(opencv_mat) {
   return [promise_img, [numRows, numCols, numChannels]];
 }
 
+var updatingDepth = false;
+
 export function updateDepthImage(camera, opencv_mat, renderCallback) {
+  if (updatingDepth) return false;
+  updatingDepth = true;
   const [promise_img, dim] = parseOpenCvMat(opencv_mat);
   promise_img.then((img) => {
     let spec = camera.redisgl;
@@ -203,11 +207,16 @@ export function updateDepthImage(camera, opencv_mat, renderCallback) {
 
     renderPointCloud(camera);
     renderCallback();
+    updatingDepth = false;
   });
   return false;
 }
 
+var updatingColor = false;
+
 export function updateColorImage(camera, opencv_mat, renderCallback) {
+  if (updatingColor) return false;
+  updatingColor = true;
   const [promise_img, dim] = parseOpenCvMat(opencv_mat);
   promise_img.then((img) => {
     let spec = camera.redisgl;
@@ -226,6 +235,7 @@ export function updateColorImage(camera, opencv_mat, renderCallback) {
 
     renderPointCloud(camera);
     renderCallback();
+    updatingColor = false;
   });
   return false;
 }
@@ -246,8 +256,8 @@ function renderPointCloud(camera) {
     for (let x = 0; x < numCols; x++) {
       let d = spec.depthImage[numCols * y + x] / 1000; // mm to m.
       if (isNaN(d) || d <= 0) continue;
-      buffer[3 * idx + 0] = d * ((numCols - x) - K[0][2]) / K[0][0];
-      buffer[3 * idx + 1] = d * (y - K[1][2]) / K[1][1];
+      buffer[3 * idx + 0] = d * (x - K[0][2]) / K[0][0];
+      buffer[3 * idx + 1] = d * ((numRows - y) - K[1][2]) / K[1][1];
       buffer[3 * idx + 2] = d;
       idx++;
     }
