@@ -15,19 +15,11 @@
 // external
 #include <spatial_dyn/algorithms/forward_kinematics.h>
 #include <spatial_dyn/structs/articulated_body.h>
+#include <spatial_dyn/parsers/json.h>
 
 namespace redis_gl {
 
 namespace simulator {
-
-const std::string kName = "simulator";
-const std::string KEY_PREFIX =
-    webapp::KEY_PREFIX + kName + "::";             // webapp::simulator::
-const std::string KEY_ARGS = KEY_PREFIX + "args";  // webapp::simulator::args
-const std::string KEY_INTERACTION =
-    KEY_PREFIX + "interaction";  // webapp::simulator::interaction
-const std::string KEY_RESOURCES =
-    webapp::KEY_RESOURCES_PREFIX + kName;  // webapp::resources::simulator
 
 struct ObjectModel {
   std::string name;
