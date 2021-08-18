@@ -185,8 +185,12 @@ function parseOpenCvMat(opencv_mat) {
   return [promise_img, [numRows, numCols, numChannels]];
 }
 
+var updatingDepth = false;
+
 export function updateDepthImage(camera, opencv_mat, renderCallback) {
   if (opencv_mat.constructor !== ArrayBuffer) return false;
+  if (updatingDepth) return false;
+  updatingDepth = true;
   const [promise_img, dim] = parseOpenCvMat(opencv_mat);
   promise_img.then((img) => {
     let spec = camera.redisgl;
@@ -213,12 +217,17 @@ export function updateDepthImage(camera, opencv_mat, renderCallback) {
     renderCameraViewFrame(camera);
     renderPointCloud(camera);
     renderCallback();
+    updatingDepth = false;
   });
   return false;
 }
 
+var updatingColor = false;
+
 export function updateColorImage(camera, opencv_mat, renderCallback) {
   if (opencv_mat.constructor !== ArrayBuffer) return false;
+  if (updatingColor) return false;
+  updatingColor = true;
   const [promise_img, dim] = parseOpenCvMat(opencv_mat);
   promise_img.then((img) => {
     let spec = camera.redisgl;
@@ -237,6 +246,7 @@ export function updateColorImage(camera, opencv_mat, renderCallback) {
 
     renderPointCloud(camera);
     renderCallback();
+    updatingColor = false;
   });
   return false;
 }
