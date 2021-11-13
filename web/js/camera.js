@@ -20,11 +20,13 @@ export function create(key, loadCallback) {
 
   // Create frame: add a line from the origin to each frame corner
   let frame = new THREE.Object3D();
+  frame.frustumCulled = false;
   for (let i = 0; i < 8; i++) {
     let geometry = new THREE.Geometry();
     geometry.vertices.push(new THREE.Vector3(), new THREE.Vector3());
     let material = new THREE.LineBasicMaterial();
     let line = new THREE.Line(geometry, material);
+    line.frustumCulled = false;
     frame.add(line);
   }
   camera.add(frame);
@@ -78,7 +80,7 @@ function getOpenCvType(buffer) {
   let word = "";
   let idx = 0;
   let char = String.fromCharCode(buffer[idx++]);
-  while (char != " ") {
+  while (idx < buffer.length && char != " ") {
     word += char;
     char = String.fromCharCode(buffer[idx++]);
   }
@@ -150,9 +152,10 @@ function parseOpenCvMat(opencv_mat) {
     });
   } else if (type == "custom") {
     // Custom format.
+    let buffer = opencv_mat.slice(idx_buffer_prefix);
     let dimOpenCv = [];
     let idx = 0;
-    while (dimOpenCv.length < 3) {
+    while (idx < buffer.length && dimOpenCv.length < 3) {
       let word = "";
       let char = String.fromCharCode(buffer[idx++]);
       while (char != " ") {
@@ -182,7 +185,12 @@ function parseOpenCvMat(opencv_mat) {
   return [promise_img, [numRows, numCols, numChannels]];
 }
 
+var updatingDepth = false;
+
 export function updateDepthImage(camera, opencv_mat, renderCallback) {
+  if (opencv_mat.constructor !== ArrayBuffer) return false;
+  if (updatingDepth) return false;
+  updatingDepth = true;
   const [promise_img, dim] = parseOpenCvMat(opencv_mat);
   promise_img.then((img) => {
     let spec = camera.redisgl;
@@ -195,30 +203,42 @@ export function updateDepthImage(camera, opencv_mat, renderCallback) {
       geometry.attributes.position.dynamic = true;
       geometry.setDrawRange(0, 0);
       points.frustumCulled = false;
+
+      let buffer_color = new Float32Array(3 * img.length);
+      for (let i = 0; i < buffer_color.length; i++) { buffer_color[i] = 1.0; }
+      geometry.addAttribute("color", new THREE.Float32BufferAttribute(buffer_color, 3));
+      geometry.attributes.color.dynamic = true;
     }
 
     // Update specs
     spec.depthImage = img;
     spec.depthDim = dim;
 
+    renderCameraViewFrame(camera);
     renderPointCloud(camera);
     renderCallback();
+    updatingDepth = false;
   });
   return false;
 }
 
+var updatingColor = false;
+
 export function updateColorImage(camera, opencv_mat, renderCallback) {
+  if (opencv_mat.constructor !== ArrayBuffer) return false;
+  if (updatingColor) return false;
+  updatingColor = true;
   const [promise_img, dim] = parseOpenCvMat(opencv_mat);
   promise_img.then((img) => {
     let spec = camera.redisgl;
-    if (spec.colorImage === null) {
-      // Create new buffer
-      let points = camera.children[0];
-      let geometry = points.geometry;
-      let buffer = new Float32Array(3 * dim[0] * dim[1]);
-      geometry.addAttribute("color", new THREE.Float32BufferAttribute(buffer, 3));
-      geometry.attributes.color.dynamic = true;
-    }
+    // if (spec.colorImage === null && spec.depthImage === null) {
+    //   // Create new buffer
+    //   let points = camera.children[0];
+    //   let geometry = points.geometry;
+    //   let buffer = new Float32Array(3 * dim[0] * dim[1]);
+    //   geometry.addAttribute("color", new THREE.Float32BufferAttribute(buffer, 3));
+    //   geometry.attributes.color.dynamic = true;
+    // }
 
     // Update specs
     spec.colorImage = img;
@@ -226,6 +246,7 @@ export function updateColorImage(camera, opencv_mat, renderCallback) {
 
     renderPointCloud(camera);
     renderCallback();
+    updatingColor = false;
   });
   return false;
 }
@@ -246,8 +267,8 @@ function renderPointCloud(camera) {
     for (let x = 0; x < numCols; x++) {
       let d = spec.depthImage[numCols * y + x] / 1000; // mm to m.
       if (isNaN(d) || d <= 0) continue;
-      buffer[3 * idx + 0] = d * ((numCols - x) - K[0][2]) / K[0][0];
-      buffer[3 * idx + 1] = d * (y - K[1][2]) / K[1][1];
+      buffer[3 * idx + 0] = d * (x - K[0][2]) / K[0][0];
+      buffer[3 * idx + 1] = d * ((numRows - y) - K[1][2]) / K[1][1];
       buffer[3 * idx + 2] = d;
       idx++;
     }
@@ -281,7 +302,6 @@ function renderPointCloud(camera) {
     }
   }
   points.geometry.attributes.color.needsUpdate = true;
-  console.log(points);
 
   return true;
 }

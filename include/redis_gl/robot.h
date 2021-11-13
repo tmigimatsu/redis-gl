@@ -15,6 +15,7 @@
 // external
 #include <spatial_dyn/algorithms/forward_kinematics.h>
 #include <spatial_dyn/structs/articulated_body.h>
+#include <spatial_dyn/parsers/json.h>
 
 namespace redis_gl {
 

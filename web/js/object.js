@@ -22,7 +22,7 @@ export function create(model, loadCallback) {
   model["graphics"].forEach((graphicsStruct) => {
     Graphics.parse(graphicsStruct, object, promises);
   });
-  object.add(Graphics.axes(AXIS_SIZE, AXIS_WIDTH));
+  // object.add(Graphics.axes(AXIS_SIZE, AXIS_WIDTH));
 
   Promise.all(promises).then(() => loadCallback(object));
   return object;
