@@ -14,8 +14,8 @@
 
 // external
 #include <spatial_dyn/algorithms/forward_kinematics.h>
-#include <spatial_dyn/structs/articulated_body.h>
 #include <spatial_dyn/parsers/json.h>
+#include <spatial_dyn/structs/articulated_body.h>
 
 namespace redis_gl {
 
@@ -26,6 +26,7 @@ struct ObjectModel {
   std::vector<spatial_dyn::Graphics> graphics;
   std::string key_pos;
   std::string key_ori;
+  std::string key_scale;
 };
 
 inline void from_json(const nlohmann::json& json, ObjectModel& object) {
@@ -34,6 +35,7 @@ inline void from_json(const nlohmann::json& json, ObjectModel& object) {
       json.at("graphics").get<std::vector<spatial_dyn::Graphics>>();
   object.key_pos = json.at("key_pos").get<std::string>();
   object.key_ori = json.at("key_ori").get<std::string>();
+  object.key_scale = json.at("key_scale").get<std::string>();
 }
 
 inline void to_json(nlohmann::json& json, const ObjectModel& object) {
@@ -41,6 +43,7 @@ inline void to_json(nlohmann::json& json, const ObjectModel& object) {
   json["graphics"] = object.graphics;
   json["key_pos"] = object.key_pos;
   json["key_ori"] = object.key_ori;
+  json["key_scale"] = object.key_scale;
 }
 
 inline std::stringstream& operator<<(std::stringstream& ss,
@@ -148,11 +151,16 @@ inline void RegisterObject(ctrl_utils::RedisClient& redis,
                            const std::vector<spatial_dyn::Graphics>& graphics,
                            const std::string& key_pos,
                            const std::string& key_ori = "",
-                           bool commit = false) {
+                           const std::string& key_scale = "",
+                           const std::string& key_matrix = "",
+                           float axis_size = 0.01, bool commit = false) {
   nlohmann::json model;
   model["graphics"] = graphics;
   model["key_pos"] = key_pos;
   model["key_ori"] = key_ori;
+  model["key_scale"] = key_scale;
+  model["key_matrix"] = key_matrix;
+  model["axis_size"] = axis_size;
   redis.set(model_keys.key_objects_prefix + name, model);
   if (commit) redis.commit();
 }
@@ -162,11 +170,16 @@ inline void RegisterObject(ctrl_utils::RedisClient& redis,
                            const spatial_dyn::Graphics& graphics,
                            const std::string& key_pos,
                            const std::string& key_ori = "",
-                           bool commit = false) {
+                           const std::string& key_scale = "",
+                           const std::string& key_matrix = "",
+                           float axis_size = 0.01, bool commit = false) {
   nlohmann::json model;
   model["graphics"] = {graphics};
   model["key_pos"] = key_pos;
   model["key_ori"] = key_ori;
+  model["key_scale"] = key_scale;
+  model["key_matrix"] = key_matrix;
+  model["axis_size"] = axis_size;
   redis.set(model_keys.key_objects_prefix + graphics.name, model);
   if (commit) redis.commit();
 }
@@ -176,6 +189,13 @@ inline void RegisterObject(ctrl_utils::RedisClient& redis,
                            const ObjectModel& object, bool commit = false) {
   nlohmann::json json(object);
   redis.set(model_keys.key_objects_prefix + object.name, json);
+}
+
+inline void UnregisterObject(ctrl_utils::RedisClient& redis,
+                             const ModelKeys& model_keys,
+                             const std::string& name, bool commit = false) {
+  redis.del({model_keys.key_objects_prefix + name});
+  if (commit) redis.commit();
 }
 
 }  // namespace simulator

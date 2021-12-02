@@ -103,9 +103,9 @@ struct Interaction {
   enum class Key { kUndefined, kAlt, kCtrl, kMeta, kShift };
 
   std::string key_object;
-  int idx_link;
-  Eigen::Vector3d pos_click_in_link;
-  Eigen::Vector3d pos_mouse_in_world;
+  int idx_link = 0;
+  Eigen::Vector3d pos_click_in_link = Eigen::Vector3d::Zero();
+  Eigen::Vector3d pos_mouse_in_world = Eigen::Vector3d::Zero();
   std::set<Key> modifier_keys;
   std::string key_down;
 };
@@ -254,11 +254,24 @@ inline void from_json(const nlohmann::json& json, Interaction& interaction) {
   interaction.key_down = json["key_down"].get<std::string>();
 }
 
-inline std::stringstream& operator>>(std::stringstream& ss,
-                                     Interaction& interaction) {
+inline void to_json(nlohmann::json& json, const Interaction& interaction) {
+  json["key_object"] = interaction.key_object;
+  json["idx_link"] = interaction.idx_link;
+  json["pos_click_in_link"] = interaction.pos_click_in_link;
+  json["pos_mouse_in_world"] = interaction.pos_mouse_in_world;
+  json["modifier_keys"] = interaction.modifier_keys;
+  json["key_down"] = interaction.key_down;
+}
+
+inline std::stringstream& operator>>(std::stringstream& ss, Interaction& interaction) {
   nlohmann::json json;
   ss >> json;
   interaction = json.get<Interaction>();
+  return ss;
+}
+
+inline std::stringstream& operator<<(std::stringstream& ss, const Interaction& interaction) {
+  ss << nlohmann::json(interaction).dump();
   return ss;
 }
 
