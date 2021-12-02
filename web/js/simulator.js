@@ -483,7 +483,7 @@ $(document).ready(function() {
 	function initGraphics() {
 
 		var width = window.innerWidth - $("#sidebar").width();
-		var height = window.innerHeight - $("#plotly").height() - 4;
+		var height = window.innerHeight;  // - $("#plotly").height() - 4;
 
 		camera = new THREE.PerspectiveCamera(50, width / height, 0.01, 100);
 		camera.position.set(1.25, -1.25, 1);
@@ -578,22 +578,23 @@ $(document).ready(function() {
 
 	$(window).resize(() => {
 		const width = window.innerWidth - $("#sidebar").width();
-		const height = $("#threejs").height() - 4;
-		$("#plotly").height(window.innerHeight - $("#threejs").height());
+		const height = window.innerHeight;
+		// const height = $("#threejs").height() - 4;
+		// $("#plotly").height(window.innerHeight - $("#threejs").height());
 		camera.aspect = width / height;
 		camera.updateProjectionMatrix();
 		renderer.setSize(width, height);
 		renderer.render(scene, camera);
 	});
-	$("body").on("resize", ".ui-resizable", () => {
-		const width = window.innerWidth - $("#sidebar").width();
-		const height = $("#threejs").height() - 4;
-		$("#plotly").height(window.innerHeight - $("#threejs").height());
-		camera.aspect = width / height;
-		camera.updateProjectionMatrix();
-		renderer.setSize(width, height);
-		renderer.render(scene, camera);
-	});
+	// $("body").on("resize", ".ui-resizable", () => {
+	// 	const width = window.innerWidth - $("#sidebar").width();
+	// 	const height = $("#threejs").height() - 4;
+	// 	$("#plotly").height(window.innerHeight - $("#threejs").height());
+	// 	camera.aspect = width / height;
+	// 	camera.updateProjectionMatrix();
+	// 	renderer.setSize(width, height);
+	// 	renderer.render(scene, camera);
+	// });
 
 	// $("#threejs").on("mousemove", function(e) {
 	//     var offset = $("#threejs").offset();

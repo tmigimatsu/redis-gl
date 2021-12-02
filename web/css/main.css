@@ -55,6 +55,7 @@ html, body {
 	height: 300px;
 }
 
+/*
 #plotly {
 	background-color: white;
 	height: 0px;
@@ -86,6 +87,7 @@ html, body {
 	margin-bottom: -10px;
 	cursor: row-resize;
 }
+*/
 
 .key-header {
 	/* display: block; */
