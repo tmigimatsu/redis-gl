@@ -53,7 +53,7 @@ function htmlForm(key, val, set, del) {
 }
 
 export function getKeys() {
-	return $("form").map((form) => $(form).attr("data-key")).toArray();
+	return $("form").map((_, form) => $(form).attr("data-key")).toArray();
 }
 
 export function getValue(key) {

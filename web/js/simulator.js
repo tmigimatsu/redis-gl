@@ -55,7 +55,7 @@ $(document).ready(function() {
 		const keys = Redis.parseMessage(buffer);
 
 		// Initialize webapp args
-		if (!parseArgs(keys.toUpdate)) return;
+		parseArgs(keys.toUpdate);
 
 		// Parse models
 		parseModels(keys.toUpdate);
@@ -129,8 +129,6 @@ $(document).ready(function() {
 				parseModelFunction(key, val);
 			});
 		}
-
-		return Object.keys(args).length;
 	}
 
 	function parseModels(keyVals) {
@@ -629,12 +627,12 @@ $(document).ready(function() {
 
 	});
 
-	$(".col-split > div:first-child").resizable({
-		handles: "e"
-	});
+	// $(".col-split > div:first-child").resizable({
+	// 	handles: "e"
+	// });
 
-	$(".row-split > div:first-child").resizable({
-		handles: "s"
-	});
+	// $(".row-split > div:first-child").resizable({
+	// 	handles: "s"
+	// });
 
 });
