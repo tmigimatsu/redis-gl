@@ -138,7 +138,3 @@ export function updateOrientation(robot, val) {
   robot.quaternion.set(quat[0], quat[1], quat[2], quat[3]);
   return true;
 }
-
-export function showAxes(robot, show) {
-  const spec = robot.redisgl;
-}

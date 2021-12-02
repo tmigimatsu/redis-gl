@@ -39,9 +39,9 @@ function htmlForm(key, val, set, del) {
     form += "\t\t\t</div>\n";
     form += "\t\t</div>\n";
   } else { // val should be a 2D array
-    val.forEach((row, idx_row) => {
+    val.forEach((row) => {
       form += "\t\t<div class='val-row'>\n";
-      row.forEach((el, idx) => {
+      row.forEach((el) => {
         form += "\t\t\t<input class='val' type='text' value='" + el + "'>\n";
       });
       form += "\t\t</div>\n";
@@ -53,7 +53,7 @@ function htmlForm(key, val, set, del) {
 }
 
 export function getKeys() {
-  return $("form").map((i, form) => $(form).attr("data-key")).toArray();
+  return $("form").map((form) => $(form).attr("data-key")).toArray();
 }
 
 export function getValue(key) {

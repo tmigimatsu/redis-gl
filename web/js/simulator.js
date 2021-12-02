@@ -22,28 +22,6 @@ var KEY_CAMERA_TARGET = "webapp::simulator::camera::target";
 var KEY_TRAJ_RESET = "webapp::simulator::trajectory::reset";
 var KEY_AXES_VISIBLE = "webapp::simulator::axes::visible";
 
-var SCHEMA_ARGS = {
-  key_cameras_prefix: "",
-  key_objects_prefix: "",
-  key_robots_prefix: "",
-  key_trajectories_prefix: ""
-};
-
-var SCHEMA_ROBOT_MODEL = {
-  articulated_body: {},
-  key_q: ""
-};
-
-var SCHEMA_OBJECT_MODEL = {
-  key_graphics: [{}],
-  key_ori: "",
-  key_pos: ""
-};
-
-var SCHEMA_TRAJECTORY_MODEL = {
-  key_pos: ""
-};
-
 $(document).ready(function() {
 
   // Set up web socket
@@ -173,7 +151,6 @@ $(document).ready(function() {
         console.error("Failed to parse model " + key + ":\n" + val);
         return false;
       }
-      console.log(keyVals);
 
       // Update html
       Redis.updateForm(key, val, true, true, true);
