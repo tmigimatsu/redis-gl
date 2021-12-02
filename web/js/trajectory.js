@@ -25,7 +25,7 @@ export function create(model, loadCallback) {
   for (var i = 0; i < 2; i++) {
     let geometry = new THREE.BufferGeometry();
     geometry.setDrawRange(0, 0);
-    geometry.addAttribute("position", buffer);
+    geometry.setAttribute("position", buffer);
     traj.add(new THREE.Line(geometry, material));
   }
 

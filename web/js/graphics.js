@@ -61,7 +61,7 @@ export function parse(graphicsStruct, body, promises) {
     const meshFilename = geometryStruct["mesh"];
     let webapp = location.pathname.split("/").pop();
     webapp = webapp.substr(0, webapp.lastIndexOf("."));
-    const dir  = "resources/" + webapp + "/" + meshFilename.substr(0, meshFilename.lastIndexOf("/") + 1);
+    const dir = "resources/" + webapp + "/" + meshFilename.substr(0, meshFilename.lastIndexOf("/") + 1);
     const file = meshFilename.substr(meshFilename.lastIndexOf("/") + 1);
     const ext = meshFilename.substr(meshFilename.lastIndexOf(".") + 1);
 
@@ -112,9 +112,9 @@ export function parse(graphicsStruct, body, promises) {
     let obj = new THREE.Object3D();
 
     let geometry = new THREE.CylinderGeometry(geometryStruct["radius"],
-                                              geometryStruct["radius"],
-                                              geometryStruct["length"],
-                                              16, 1, true);
+      geometryStruct["radius"],
+      geometryStruct["length"],
+      16, 1, true);
     let material = new THREE.MeshNormalMaterial();
     material.transparent = true;
     let cylinder = new THREE.Mesh(geometry, material);
@@ -124,8 +124,8 @@ export function parse(graphicsStruct, body, promises) {
     const thetaRanges = [[0., Math.PI / 2.], [Math.PI / 2., Math.PI]];
     for (let i = 0; i < 2; i++) {
       let geometry = new THREE.SphereGeometry(graphicsStruct.geometry.radius, 16, 16,
-                                              0., Math.PI * 2.,
-                                              thetaRanges[i][0], thetaRanges[i][1]);
+        0., Math.PI * 2.,
+        thetaRanges[i][0], thetaRanges[i][1]);
       let material = new THREE.MeshNormalMaterial();
       material.transparent = true;
       ends.push(new THREE.Mesh(geometry, material));
@@ -152,11 +152,11 @@ export function parse(graphicsStruct, body, promises) {
 
     let sphere;
     // if (body.children.length === 0) {
-      let geometry = new THREE.SphereGeometry(1, 16, 16);
-      let material = new THREE.MeshNormalMaterial();
-      material.transparent = true;
-      sphere = new THREE.Mesh(geometry, material);
-      body.add(sphere);
+    let geometry = new THREE.SphereGeometry(1, 16, 16);
+    let material = new THREE.MeshNormalMaterial();
+    material.transparent = true;
+    sphere = new THREE.Mesh(geometry, material);
+    body.add(sphere);
     // } else {
     //   sphere = body.children[0];
     //   if (sphere.geometry.type != "SphereGeometry") {
@@ -177,11 +177,11 @@ export function parse(graphicsStruct, body, promises) {
 
     let cylinder;
     // if (body.children.length === 0) {
-      let geometry = new THREE.CylinderGeometry(1, 1, 1, 16);
-      let material = new THREE.MeshNormalMaterial();
-      material.transparent = true;
-      cylinder = new THREE.Mesh(geometry, material);
-      body.add(cylinder);
+    let geometry = new THREE.CylinderGeometry(1, 1, 1, 16);
+    let material = new THREE.MeshNormalMaterial();
+    material.transparent = true;
+    cylinder = new THREE.Mesh(geometry, material);
+    body.add(cylinder);
     // } else {
     //   cylinder = body.children[0];
     //   if (cylinder.geometry.type != "CylinderGeometry") {
@@ -207,38 +207,38 @@ export function axes(size, line_width, colors) {
 
   let xyz = new THREE.Object3D();
 
-  let x_material = new MeshLineMaterial({
+  const x_material = new MeshLineMaterial({
     color: new THREE.Color(colors[0]),
     lineWidth: line_width
   });
-  let x_geometry = new THREE.Geometry();
-  x_geometry.vertices.push(new THREE.Vector3(0, 0, 0));
-  x_geometry.vertices.push(new THREE.Vector3(size, 0, 0));
+  const x_vertices = new Float32Array([0, 0, 0, size, 0, 0]);
+  const x_geometry = new THREE.BufferGeometry()
+    .setAttribute("position", new THREE.BufferAttribute(x_vertices, 3));
   let x_line = new MeshLine();
   x_line.setGeometry(x_geometry);
-  let x = new THREE.Mesh(x_line.geometry, x_material)
+  const x = new THREE.Mesh(x_line.geometry, x_material)
 
-  let y_material = new MeshLineMaterial({
+  const y_material = new MeshLineMaterial({
     color: new THREE.Color(colors[1]),
     lineWidth: line_width
   });
-  let y_geometry = new THREE.Geometry();
-  y_geometry.vertices.push(new THREE.Vector3(0, 0, 0));
-  y_geometry.vertices.push(new THREE.Vector3(0, size, 0));
+  const y_vertices = new Float32Array([0, 0, 0, 0, size, 0]);
+  const y_geometry = new THREE.BufferGeometry()
+    .setAttribute("position", new THREE.BufferAttribute(y_vertices, 3));
   let y_line = new MeshLine();
   y_line.setGeometry(y_geometry);
-  let y = new THREE.Mesh(y_line.geometry, y_material)
+  const y = new THREE.Mesh(y_line.geometry, y_material)
 
   let z_material = new MeshLineMaterial({
     color: new THREE.Color(colors[2]),
     lineWidth: line_width
   });
-  let z_geometry = new THREE.Geometry();
-  z_geometry.vertices.push(new THREE.Vector3(0, 0, 0));
-  z_geometry.vertices.push(new THREE.Vector3(0, 0, size));
+  const z_vertices = new Float32Array([0, 0, 0, 0, 0, size]);
+  const z_geometry = new THREE.BufferGeometry()
+    .setAttribute("position", new THREE.BufferAttribute(z_vertices, 3));
   let z_line = new MeshLine();
   z_line.setGeometry(z_geometry);
-  let z = new THREE.Mesh(z_line.geometry, z_material)
+  const z = new THREE.Mesh(z_line.geometry, z_material)
 
   xyz.add(x);
   xyz.add(y);

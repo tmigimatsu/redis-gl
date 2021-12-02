@@ -13,14 +13,14 @@ import * as Robot from "./robot.js"
 import * as Trajectory from "./trajectory.js"
 
 var AXIS_WIDTH = 0.005;
-var AXIS_SIZE  = 0.1;
+var AXIS_SIZE = 0.1;
 
-var KEY_ARGS          = "webapp::simulator::args";
-var KEY_INTERACTION   = "webapp::simulator::interaction";
-var KEY_CAMERA_POS    = "webapp::simulator::camera::pos";
+var KEY_ARGS = "webapp::simulator::args";
+var KEY_INTERACTION = "webapp::simulator::interaction";
+var KEY_CAMERA_POS = "webapp::simulator::camera::pos";
 var KEY_CAMERA_TARGET = "webapp::simulator::camera::target";
-var KEY_TRAJ_RESET    = "webapp::simulator::trajectory::reset";
-var KEY_AXES_VISIBLE  = "webapp::simulator::axes::visible";
+var KEY_TRAJ_RESET = "webapp::simulator::trajectory::reset";
+var KEY_AXES_VISIBLE = "webapp::simulator::axes::visible";
 
 var SCHEMA_ARGS = {
   key_cameras_prefix: "",
@@ -57,8 +57,8 @@ $(document).ready(function() {
   let interaction = {
     key_object: "",
     idx_link: 0,
-    pos_click_in_link: [0,0,0],
-    pos_mouse_in_world: [0,0,0],
+    pos_click_in_link: [0, 0, 0],
+    pos_mouse_in_world: [0, 0, 0],
     modifier_keys: [],
     key_down: ""
   };
@@ -160,14 +160,14 @@ $(document).ready(function() {
       let val = keyVals[key];
 
       // Skip binary objects
-      if (typeof(val) === "object") continue;
+      if (typeof (val) === "object") continue;
 
       // Try parsing all model types
       try {
         if (!parseCameraModel(key, val) &&
-            !parseObjectModel(key, val) &&
-            !parseRobotModel(key, val) &&
-            !parseTrajectoryModel(key, val)) continue;
+          !parseObjectModel(key, val) &&
+          !parseRobotModel(key, val) &&
+          !parseTrajectoryModel(key, val)) continue;
       } catch (error) {
         console.error(error);
         console.error("Failed to parse model " + key + ":\n" + val);
@@ -183,7 +183,7 @@ $(document).ready(function() {
   function isModelKey(key, keyPrefix) {
     for (const modelKeys in args) {
       if (args[modelKeys][keyPrefix] !== "" &&
-          key.startsWith(args[modelKeys][keyPrefix])) return true;
+        key.startsWith(args[modelKeys][keyPrefix])) return true;
     }
     return false;
   }
@@ -215,11 +215,27 @@ $(document).ready(function() {
       updateInteraction(key, object);
       return renderFrame;
     });
-    registerRedisUpdateCallback(model["key_ori"], key, objects[key], (object, val) => {
-      const renderFrame = GraphicsObject.updateOrientation(object, val);
-      updateInteraction(key, object);
-      return renderFrame;
-    });
+    if (model["key_ori"] !== "") {
+      registerRedisUpdateCallback(model["key_ori"], key, objects[key], (object, val) => {
+        const renderFrame = GraphicsObject.updateOrientation(object, val);
+        updateInteraction(key, object);
+        return renderFrame;
+      });
+    }
+    if (model["key_scale"] !== "") {
+      registerRedisUpdateCallback(model["key_scale"], key, objects[key], (object, val) => {
+        const renderFrame = GraphicsObject.updateScale(object, val);
+        updateInteraction(key, object);
+        return renderFrame;
+      });
+    }
+    if (model["key_matrix"] !== "") {
+      registerRedisUpdateCallback(model["key_matrix"], key, objects[key], (object, val) => {
+        const renderFrame = GraphicsObject.updateMatrix(object, val);
+        updateInteraction(key, object);
+        return renderFrame;
+      });
+    }
     console.log("New object: " + key);
     return true;
   }
@@ -280,13 +296,14 @@ $(document).ready(function() {
       // Call update event
       if (key in redisUpdateCallbacks) {
         for (const keyComponent in redisUpdateCallbacks[key]) {
+          // console.log(key, keyComponent);
           const updateCallback = redisUpdateCallbacks[key][keyComponent];
           renderFrame = updateCallback(val) || renderFrame;
         }
       }
 
       // Update html
-      if (typeof(val) === "object" && val.constructor === ArrayBuffer) {
+      if (typeof (val) === "object" && val.constructor === ArrayBuffer) {
         Redis.updateForm(key, null, false, true, false);
       } else {
         Redis.updateForm(key, val, true, true, true);
@@ -319,7 +336,7 @@ $(document).ready(function() {
     const $canvas = $(renderer.domElement);
     const offset = $canvas.offset();
     return new THREE.Vector2((event.clientX - offset.left) / $canvas.width() * 2 - 1,
-                             -(event.clientY - offset.top) / $canvas.height() * 2 + 1);
+      -(event.clientY - offset.top) / $canvas.height() * 2 + 1);
   }
 
   function getAllMeshes() {
@@ -409,14 +426,14 @@ $(document).ready(function() {
     // Find intersected body
     const intersect = intersects[0];
     let keyVal = findIntersectedObject(intersect, robots,
-                                        (robot, object) => robot.redisgl.bodies.includes(object));
+      (robot, object) => robot.redisgl.bodies.includes(object));
     if (!keyVal[0]) {
       keyVal = findIntersectedObject(intersect, objects)
     }
     if (!keyVal[0]) return;
 
     const key_object = keyVal[0];
-    const object     = keyVal[1];
+    const object = keyVal[1];
     interaction["key_object"] = key_object;
     if (key_object in robots) {
       interaction["idx_link"] = robots[key_object].redisgl.bodies.indexOf(object);
@@ -429,11 +446,11 @@ $(document).ready(function() {
     // Create mouse line
     let lineGeometry = new THREE.BufferGeometry();
     let lineVertices = new Float32Array([
-        intersect.point.x, intersect.point.y, intersect.point.z,
-        intersect.point.x, intersect.point.y, intersect.point.z
+      intersect.point.x, intersect.point.y, intersect.point.z,
+      intersect.point.x, intersect.point.y, intersect.point.z
     ]);
-    lineGeometry.addAttribute("position", new THREE.BufferAttribute(lineVertices, 3));
-    let lineMaterial = new THREE.LineBasicMaterial({ color: 0xffffff  });
+    lineGeometry.setAttribute("position", new THREE.BufferAttribute(lineVertices, 3));
+    let lineMaterial = new THREE.LineBasicMaterial({ color: 0xffffff });
     let line = new THREE.Line(lineGeometry, lineMaterial);
     scene.add(line);
 
@@ -475,8 +492,8 @@ $(document).ready(function() {
       scene.remove(line);
       interaction.key_object = "";
       interaction.idx_link = 0;
-      interaction.pos_click_in_link = [0,0,0];
-      interaction.pos_mouse_in_world = [0,0,0];
+      interaction.pos_click_in_link = [0, 0, 0];
+      interaction.pos_mouse_in_world = [0, 0, 0];
       interaction.modifier_keys = [];
       Redis.sendAjax("SET", KEY_INTERACTION, interaction);
       Redis.updateForm(KEY_INTERACTION, JSON.stringify(interaction));
@@ -583,13 +600,13 @@ $(document).ready(function() {
   }
 
   $(window).resize(() => {
-      const width = window.innerWidth - $("#sidebar").width();
-      const height = $("#threejs").height() - 4;
-      $("#plotly").height(window.innerHeight - $("#threejs").height());
-      camera.aspect = width / height;
-      camera.updateProjectionMatrix();
-      renderer.setSize(width, height);
-      renderer.render(scene, camera);
+    const width = window.innerWidth - $("#sidebar").width();
+    const height = $("#threejs").height() - 4;
+    $("#plotly").height(window.innerHeight - $("#threejs").height());
+    camera.aspect = width / height;
+    camera.updateProjectionMatrix();
+    renderer.setSize(width, height);
+    renderer.render(scene, camera);
   });
   $("body").on("resize", ".ui-resizable", () => {
     const width = window.innerWidth - $("#sidebar").width();

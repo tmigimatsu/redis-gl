@@ -22,8 +22,10 @@ export function create(key, loadCallback) {
   let frame = new THREE.Object3D();
   frame.frustumCulled = false;
   for (let i = 0; i < 8; i++) {
-    let geometry = new THREE.Geometry();
-    geometry.vertices.push(new THREE.Vector3(), new THREE.Vector3());
+    let geometry = new THREE.BufferGeometry();
+    let vertices = new Float32Array(6);
+    geometry.setAttribute("position", new THREE.BufferAttribute(vertices, 3));
+    geometry.setDrawRange(0, 2);
     let material = new THREE.LineBasicMaterial();
     let line = new THREE.Line(geometry, material);
     line.frustumCulled = false;
@@ -199,14 +201,14 @@ export function updateDepthImage(camera, opencv_mat, renderCallback) {
       let points = camera.children[0];
       let geometry = points.geometry;
       let buffer = new Float32Array(3 * img.length);
-      geometry.addAttribute("position", new THREE.Float32BufferAttribute(buffer, 3));
+      geometry.setAttribute("position", new THREE.Float32BufferAttribute(buffer, 3));
       geometry.attributes.position.dynamic = true;
       geometry.setDrawRange(0, 0);
       points.frustumCulled = false;
 
       let buffer_color = new Float32Array(3 * img.length);
       for (let i = 0; i < buffer_color.length; i++) { buffer_color[i] = 1.0; }
-      geometry.addAttribute("color", new THREE.Float32BufferAttribute(buffer_color, 3));
+      geometry.setAttribute("color", new THREE.Float32BufferAttribute(buffer_color, 3));
       geometry.attributes.color.dynamic = true;
     }
 
@@ -236,7 +238,7 @@ export function updateColorImage(camera, opencv_mat, renderCallback) {
     //   let points = camera.children[0];
     //   let geometry = points.geometry;
     //   let buffer = new Float32Array(3 * dim[0] * dim[1]);
-    //   geometry.addAttribute("color", new THREE.Float32BufferAttribute(buffer, 3));
+    //   geometry.setAttribute("color", new THREE.Float32BufferAttribute(buffer, 3));
     //   geometry.attributes.color.dynamic = true;
     // }
 
@@ -326,20 +328,26 @@ function renderCameraViewFrame(camera) {
 
   // Lines from frame origin to corners
   for (let i = 0; i < 4; i++) {
-    const corner = corners[i];
+    const corner = corners[i].toArray();
     let geometry = frame.children[i].geometry;
-    geometry.vertices[1].copy(corner);
-    geometry.verticesNeedUpdate = true;
+    for (let j = 0; j < 3; j++) {
+      geometry.attributes.position.array[j + 3] = corner[j];
+    }
+    geometry.attributes.position.needsUpdate = true;
   }
 
   // Lines between corners
   for (let i = 4; i < 8; i++) {
-    const corner1 = corners[i % 4];
-    const corner2 = corners[(i + 1) % 4];
+    const corner1 = corners[i % 4].toArray();
+    const corner2 = corners[(i + 1) % 4].toArray();
     let geometry = frame.children[i].geometry;
-    geometry.vertices[0].copy(corner1);
-    geometry.vertices[1].copy(corner2);
-    geometry.verticesNeedUpdate = true;
+    for (let j = 0; j < 3; j++) {
+      geometry.attributes.position.array[j] = corner1[j];
+    }
+    for (let j = 0; j < 3; j++) {
+      geometry.attributes.position.array[j + 3] = corner2[j];
+    }
+    geometry.attributes.position.needsUpdate = true;
   }
 
   return true;
