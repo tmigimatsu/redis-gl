@@ -24,10 +24,16 @@ var KEY_AXES_VISIBLE = "webapp::simulator::axes::visible";
 
 $(document).ready(function() {
 
+	let handlingMessage = false;
+
 	// Set up web socket
 	$.get("/get_websocket_port", function(ws_port) {
 		let ws = new WebSocket("ws://" + window.location.hostname + ":" + ws_port);
-		ws.onmessage = (e) => new Response(e.data).arrayBuffer().then(handleMessage);
+		ws.onmessage = (e) => {
+			if (handlingMessage) return;
+			// handlingMessage = true;
+			new Response(e.data).arrayBuffer().then(handleMessage);
+		}
 	});
 
 	let camera, scene, renderer, raycaster, controls;
@@ -70,6 +76,7 @@ $(document).ready(function() {
 		if (renderFrame) {
 			renderer.render(scene, camera);
 		}
+		handlingMessage = false;
 	};
 
 	function registerRedisUpdateCallback(key, keyComponent, component, updateCallback) {
@@ -77,7 +84,10 @@ $(document).ready(function() {
 		if (!(key in redisUpdateCallbacks)) {
 			redisUpdateCallbacks[key] = [];
 		}
-		let renderCallback = () => { renderer.render(scene, camera); };
+		let renderCallback = (callback) => {
+			renderer.render(scene, camera);
+			if (callback) callback();
+		};
 		redisUpdateCallbacks[key][keyComponent] = (val) => {
 			return updateCallback(component, val, renderCallback);
 		};

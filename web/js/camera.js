@@ -9,6 +9,8 @@
 
 import * as Redis from "./redis.js"
 
+let DOWNSCALE_FACTOR = 2;
+
 export function create(key, loadCallback) {
 	let camera = new THREE.Object3D();
 
@@ -198,13 +200,14 @@ export function updateDepthImage(camera, opencv_mat, renderCallback) {
 			// Create new buffer
 			let points = camera.children[0];
 			let geometry = points.geometry;
-			let buffer = new Float32Array(3 * img.length);
+			let len_buffer = 3 * img.length / (DOWNSCALE_FACTOR * DOWNSCALE_FACTOR);
+			let buffer = new Float32Array(len_buffer);
 			geometry.setAttribute("position", new THREE.Float32BufferAttribute(buffer, 3));
 			geometry.attributes.position.dynamic = true;
 			geometry.setDrawRange(0, 0);
 			points.frustumCulled = false;
 
-			let buffer_color = new Float32Array(3 * img.length);
+			let buffer_color = new Float32Array(len_buffer);
 			for (let i = 0; i < buffer_color.length; i++) { buffer_color[i] = 1.0; }
 			geometry.setAttribute("color", new THREE.Float32BufferAttribute(buffer_color, 3));
 			geometry.attributes.color.dynamic = true;
@@ -216,8 +219,13 @@ export function updateDepthImage(camera, opencv_mat, renderCallback) {
 
 		renderCameraViewFrame(camera);
 		renderPointCloud(camera);
-		renderCallback();
-		updatingDepth = false;
+		if (!updatingColor) {
+			renderCallback(() => {
+				updatingDepth = false;
+			});
+		} else {
+			updatingDepth = false;
+		}
 	});
 	return false;
 }
@@ -245,8 +253,13 @@ export function updateColorImage(camera, opencv_mat, renderCallback) {
 		spec.colorDim = dim;
 
 		renderPointCloud(camera);
-		renderCallback();
-		updatingColor = false;
+		if (!updatingDepth) {
+			renderCallback(() => {
+				updatingColor = false;
+			});
+		} else {
+			updatingColor = false;
+		}
 	});
 	return false;
 }
@@ -264,7 +277,9 @@ function renderPointCloud(camera) {
 	// Update points
 	let idx = 0;
 	for (let y = 0; y < numRows; y++) {
+		if (y % DOWNSCALE_FACTOR != 0) continue;
 		for (let x = 0; x < numCols; x++) {
+			if (x % DOWNSCALE_FACTOR != 0) continue;
 			let d = spec.depthImage[numCols * y + x] / 1000; // mm to m.
 			if (isNaN(d) || d <= 0) continue;
 			buffer[3 * idx + 0] = d * (x - K[0][2]) / K[0][0];
@@ -290,8 +305,10 @@ function renderPointCloud(camera) {
 	// Update colors.
 	idx = 0;
 	for (let y = 0; y < numRows; y++) {
+		if (y % DOWNSCALE_FACTOR != 0) continue;
 		let idxRow = (numRows - y) * numCols * numChannels;
 		for (let x = 0; x < numCols; x++) {
+			if (x % DOWNSCALE_FACTOR != 0) continue;
 			let idxCol = x * numChannels;
 			let d = spec.depthImage[numCols * y + x] / 1000; // mm to m.
 			if (isNaN(d) || d <= 0) continue;
