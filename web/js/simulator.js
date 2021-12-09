@@ -31,7 +31,7 @@ $(document).ready(function() {
 		let ws = new WebSocket("ws://" + window.location.hostname + ":" + ws_port);
 		ws.onmessage = (e) => {
 			if (handlingMessage) return;
-			// handlingMessage = true;
+			handlingMessage = true;
 			new Response(e.data).arrayBuffer().then(handleMessage);
 		}
 	});
