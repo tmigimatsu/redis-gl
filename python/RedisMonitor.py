@@ -133,6 +133,8 @@ class RedisMonitor:
                     if self.redis_db.type(key) != b"string":
                         continue
                     key = key.decode("utf-8")
+                    if "high_res" in key:
+                        continue
                     new_keys.add(key)
 
                     val = self.parse_val(key)

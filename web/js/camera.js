@@ -112,7 +112,7 @@ function parseOpenCvMat(opencv_mat) {
 	let numCols = 0;
 	let numChannels = 0;
 	if (type.includes("CV_32FC")) {
-		[size, idx_buffer_prefix] = getBufferSize(buffer_prefix, idx_buffer_prefix);
+		idx_buffer_prefix = getBufferSize(buffer_prefix, idx_buffer_prefix)[1];
 		let buffer_exr = opencv_mat.slice(idx_buffer_prefix);
 
 		let exr_loader = new THREE.EXRLoader();
@@ -125,7 +125,7 @@ function parseOpenCvMat(opencv_mat) {
 
 		promise_img = new Promise((resolve, reject) => { resolve(exr.data); });
 	} else if (type.includes("CV_")) {
-		[_, idx_buffer_prefix] = getBufferSize(buffer_prefix, idx_buffer_prefix);
+		idx_buffer_prefix = getBufferSize(buffer_prefix, idx_buffer_prefix)[1];
 		const dv = new DataView(opencv_mat);
 		numCols = dv.getUint32(idx_buffer_prefix + 16);
 		numRows = dv.getUint32(idx_buffer_prefix + 20);
