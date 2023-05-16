@@ -44,7 +44,24 @@ function loadDae(dir, file) {
 		new THREE.ColladaLoader()
 			.setPath(dir)
 			.load(file, resolve, null, reject);
-	})
+	});
+}
+
+function loadStl(dir, file) {
+	return new Promise((resolve, reject) => {
+		let loader = new THREE.STLLoader();
+		loader.path = dir;
+		loader.load(file, (geometry) => {
+			var material;
+			// if (geometry.hasColors) {
+			// 	material = new THREE.MeshPhongMaterial({ opacity: geometry.alpha, vertexColors: true });
+			// 	console.log("COLORS")
+			// } else {
+				material = new THREE.MeshNormalMaterial();
+			// }
+			resolve(new THREE.Mesh(geometry, material));
+		}, null, reject);
+	});
 }
 
 export function parse(graphicsStruct, body, promises) {
@@ -63,13 +80,15 @@ export function parse(graphicsStruct, body, promises) {
 		webapp = webapp.substr(0, webapp.lastIndexOf("."));
 		const dir = "resources/" + webapp + "/" + meshFilename.substr(0, meshFilename.lastIndexOf("/") + 1);
 		const file = meshFilename.substr(meshFilename.lastIndexOf("/") + 1);
-		const ext = meshFilename.substr(meshFilename.lastIndexOf(".") + 1);
+		const ext = meshFilename.substr(meshFilename.lastIndexOf(".") + 1).toLowerCase();
 
 		let promise;
 		if (ext === "obj") {
 			promise = loadObj(dir, file);
 		} else if (ext === "dae") {
 			promise = loadDae(dir, file);
+		} else if (ext === "stl") {
+			promise = loadStl(dir, file);
 		} else {
 			console.error("Unsupported filetype: " + meshFilename);
 			return;
