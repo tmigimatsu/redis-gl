@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools >= 64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "redisgl"
+version = "0.1.0"
+authors = [
+    {name = "Toki Migimatsu", email = "takatoki@cs.stanford.edu"}
+]
+description = "Redis-based robot visualizer"
+dependencies = ["redis"]
+
+[tool.setuptools]
+packages = ["redisgl"]
