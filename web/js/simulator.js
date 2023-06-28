@@ -565,7 +565,7 @@ $(document).ready(function() {
 			}
 		});
 
-		var grid = new THREE.GridHelper(1, 10);
+		var grid = new THREE.GridHelper(2, 20);
 		grid.rotation.x = Math.PI / 2;
 		scene.add(grid);
 		scene.add(Graphics.axes(AXIS_SIZE, AXIS_WIDTH));

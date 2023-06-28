@@ -9,7 +9,7 @@
 
 import * as Redis from "./redis.js"
 
-let DOWNSCALE_FACTOR = 2;
+let DOWNSCALE_FACTOR = 1;
 
 export function create(key, loadCallback) {
 	let camera = new THREE.Object3D();
