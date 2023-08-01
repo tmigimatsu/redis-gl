@@ -78,9 +78,7 @@ export function getForm(key) {
 }
 
 export function addForm(key, val, set, del, verbose, callback) {
-	let $form = $("form[data-key='" + key + "']");
-
-	$form = $(htmlForm(key, val, set, del)).hide();
+	let $form = $(htmlForm(key, val, set, del)).hide();
 	$form.on("submit", (e) => {
 		e.preventDefault();
 

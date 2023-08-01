@@ -162,6 +162,7 @@ class ModelKeys:
     key_objects_prefix: str
     key_trajectories_prefix: str
     key_cameras_prefix: str
+    key_images_prefix: str
 
     def __init__(self, key_namespace: str):
         self.key_namespace = key_namespace
@@ -169,6 +170,7 @@ class ModelKeys:
         self.key_objects_prefix = key_namespace + "::model::object::"
         self.key_trajectories_prefix = key_namespace + "::model::trajectory::"
         self.key_cameras_prefix = key_namespace + "::model::camera::"
+        self.key_images_prefix = key_namespace + "::model::image::"
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -176,6 +178,7 @@ class ModelKeys:
             "key_objects_prefix": self.key_objects_prefix,
             "key_trajectories_prefix": self.key_trajectories_prefix,
             "key_cameras_prefix": self.key_cameras_prefix,
+            "key_images_prefix": self.key_images_prefix,
         }
 
 
@@ -248,6 +251,20 @@ class TrajectoryModel:
         return {
             "name": self.name,
             "key_pos": self.key_pos,
+        }
+
+
+@dataclasses.dataclass
+class ImageModel:
+    name: str
+    key_image: str
+    key_segmentations: tuple[str] = ()
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "key_image": self.key_image,
+            "key_segmentations": self.key_segmentations,
         }
 
 
@@ -404,3 +421,32 @@ def unregister_trajectory(
         trajectory: Trajectory model.
     """
     redis.delete(model_keys.key_trajectories_prefix + trajectory.name)
+
+
+def register_image(
+    redis: ctrlutils.RedisClient, model_keys: ModelKeys, image: ImageModel
+) -> None:
+    """Registers an image with redisgl.
+
+    Args:
+        redis: Redis client.
+        model_keys: Redisgl app namespace.
+        image: Image model.
+    """
+    redis.set(
+        model_keys.key_images_prefix + image.name,
+        json.dumps(image.to_dict()),
+    )
+
+
+def unregister_image(
+    redis: ctrlutils.RedisClient, model_keys: ModelKeys, image: ImageModel
+) -> None:
+    """Unregisters a camera with redisgl.
+
+    Args:
+        redis: Redis client.
+        model_keys: Redisgl app namespace.
+        image: Image model.
+    """
+    redis.delete(model_keys.key_images_prefix + image.name)

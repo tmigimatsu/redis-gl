@@ -19,6 +19,15 @@ html, body {
 	overflow: hidden;
 	height: 100%;
 }
+.col-divider {
+	width: 5px;
+	background: black;
+	cursor: col-resize;
+}
+.col-divider:hover {
+	background: #3E4452;
+	cursor: col-resize;
+}
 
 #sidebar {
 	display: flex;
@@ -27,7 +36,7 @@ html, body {
 	min-width: 331px;
 	max-width: 90%;
 	/* height: 100%; */
-	background: #eee;
+	background: #3E4452;
 	overflow: auto;
 	/* overflow-x: auto; */
 }
@@ -38,7 +47,7 @@ html, body {
 
 #sidebar-keys {
 	box-shadow: 0 2px 2px 0 rgba(0,0,0,0.1), 0 1px 5px 0 rgba(0,0,0,0.08), 0 3px 1px -2px rgba(0,0,0,0.16);
-	background: white;
+	background: #2C323C;
 	/* overflow-y: scroll; */
 }
 
@@ -53,6 +62,10 @@ html, body {
 }
 #console {
 	height: 300px;
+}
+
+#sidebar-right {
+	background: #282C34;
 }
 
 /*
@@ -94,8 +107,8 @@ html, body {
 	display: flex;
 	justify-content: space-between;
 	font-size: 14.5px;
-	background-color: lightcoral;
-	color: white;
+	background-color: #3E4452;
+	color: #ABB2BF;
 	padding: 0px 15px;
 	height: 40px;
 	line-height: 40px;
@@ -112,13 +125,13 @@ html, body {
 	line-height: 40px;
 	padding: 0px 10px;
 	background-color: transparent;
-	color: white;
+	color: #ABB2BF;
 	font-size: 14.5px;
 	outline: none;
 	text-transform: uppercase;
 }
 .key-header input:hover {
-	background-color: #ea454b;
+	background-color: #2C323C;
 	cursor: pointer;
 }
 
@@ -130,14 +143,16 @@ html, body {
 	font-size: 14px;
 	/* width: 42px; */
 	width: 82px;
-	border: 1px solid lightgray;
+	border: 1px solid #3B4048;
+	background: #282C34;
+	color: #ABB2BF;
 	outline: none;
 	padding: 0px 6px;
 	line-height: 24px;
 	margin: 0px 3px 7px 0px;
 }
 .val-body .val:focus {
-	border-bottom: 3px solid lightcoral;
+	border-bottom: 3px solid #5C6370;
 	margin-bottom: 5px;
 }
 .val-string {

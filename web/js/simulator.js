@@ -8,6 +8,7 @@
 import * as Camera from "./camera.js"
 import * as Graphics from "./graphics.js"
 import * as GraphicsObject from "./object.js"
+import * as ImageView from "./image.js"
 import * as Redis from "./redis.js"
 import * as Robot from "./robot.js"
 import * as Trajectory from "./trajectory.js"
@@ -54,6 +55,7 @@ $(document).ready(function() {
 	let objects = {};
 	let trajectories = {};
 	let cameras = {};
+	let images = {};
 
 	initGraphics();
 
@@ -132,6 +134,8 @@ $(document).ready(function() {
 					parseModelFunction = parseRobotModel;
 				} else if (key.startsWith(args[namespace]["key_trajectories_prefix"])) {
 					parseModelFunction = parseTrajectoryModel;
+				} else if (key.startsWith(args[namespace]["key_images_prefix"])) {
+					parseModelFunction = parseImageModel;
 				} else {
 					return;
 				}
@@ -153,7 +157,8 @@ $(document).ready(function() {
 				if (!parseCameraModel(key, val) &&
 					!parseObjectModel(key, val) &&
 					!parseRobotModel(key, val) &&
-					!parseTrajectoryModel(key, val)) continue;
+					!parseTrajectoryModel(key, val) &&
+					!parseImageModel(key, val)) continue;
 			} catch (error) {
 				console.error(error);
 				console.error("Failed to parse model " + key + ":\n" + val);
@@ -236,6 +241,19 @@ $(document).ready(function() {
 		return true;
 	}
 
+	function parseImageModel(key, val) {
+		if (!isModelKey(key, "key_images_prefix")) return false;
+
+		// Parse object model
+		const model = JSON.parse(val);
+		addComponentToScene(ImageView, images, key, model);
+		registerRedisUpdateCallback(model["key_image"], key, images[key], ImageView.updateImage);
+		for (let i = 0; i < model.key_segmentations.length; i++) {
+			registerRedisUpdateCallback(model.key_segmentations[i], key, images[key].segmentations[i], ImageView.updateImageSegmentation);
+		}
+		return true;
+	}
+
 	function parseCameraModel(key, val) {
 		if (!isModelKey(key, "key_cameras_prefix")) return false;
 
@@ -263,6 +281,8 @@ $(document).ready(function() {
 			delete components[key];
 		}
 		components[key] = component;
+
+		if (!(component instanceof THREE.Object3D)) return;
 
 		scene.add(component);
 		renderer.render(scene, camera);
@@ -637,6 +657,47 @@ $(document).ready(function() {
 
 	});
 
+	let col_dividers = document.getElementsByClassName("col-divider");
+	for (let i = 0; i < col_dividers.length; i++) {
+		const col_divider = col_dividers[i];
+		const left_col = $(col_divider).prev("div")[0];
+		const right_col = $(col_divider).next("div")[0];
+		let x_mousedown = 0;
+		let width_l_mousedown = 0;
+		let width_r_mousedown = 0;
+		col_divider.addEventListener("mousedown", e => {
+			e.preventDefault();
+			x_mousedown = e.pageX;
+			width_l_mousedown = $(left_col).width();
+			width_r_mousedown = $(right_col).width();
+
+			window.addEventListener("mousemove", resize_col);
+			window.addEventListener("mouseup", stop_resize_col);
+		});
+
+		function resize_col(e) {
+			const dx = e.pageX - x_mousedown;
+			const width_l = width_l_mousedown + dx;
+			const width_r = width_r_mousedown - dx;
+
+			left_col.style.width = width_l + "px";
+			right_col.style.width = width_r + "px";
+			const canvases = right_col.getElementsByTagName("canvas");
+			for (let j = 0; j < canvases.length; j++) {
+				const canvas = canvases[j];
+				const aspect_ratio = canvas.raw_img.height / canvas.raw_img.width;
+				canvas.width = width_r;
+				canvas.height = aspect_ratio * width_r;
+				ImageView.drawImage(canvas);
+			}
+		}
+
+		function stop_resize_col() {
+			window.removeEventListener("mousemove", resize_col);
+			window.removeEventListener("mouseup", stop_resize_col);
+		}
+
+	}
 	// $(".col-split > div:first-child").resizable({
 	// 	handles: "e"
 	// });

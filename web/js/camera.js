@@ -8,10 +8,11 @@
  */
 
 import * as Redis from "./redis.js"
+import * as ImageView from "./image.js"
 
 let DOWNSCALE_FACTOR = 1;
 
-export function create(key, loadCallback) {
+export function create(model, loadCallback) {
 	let camera = new THREE.Object3D();
 
 	// Create point cloud
@@ -42,6 +43,7 @@ export function create(key, loadCallback) {
 		depthDim: [0, 0, 0],
 		colorDim: [0, 0, 0],
 		intrinsic: null,
+		model: model,
 	};
 
 	loadCallback(camera);
@@ -104,7 +106,7 @@ function getBufferSize(buffer, idx) {
 	return [size, idx];
 }
 
-function parseOpenCvMat(opencv_mat) {
+export function parseOpenCvMat(opencv_mat) {
 	// Parse opencv_mat message
 	let buffer_prefix = new Uint8Array(opencv_mat);
 	let [type, idx_buffer_prefix] = getOpenCvType(buffer_prefix);
@@ -239,6 +241,8 @@ export function updateColorImage(camera, opencv_mat, renderCallback) {
 	const [promise_img, dim] = parseOpenCvMat(opencv_mat);
 	promise_img.then((img) => {
 		let spec = camera.redisgl;
+
+		ImageView.renderImage(camera.redisgl, img, dim);
 		// if (spec.colorImage === null && spec.depthImage === null) {
 		//   // Create new buffer
 		//   let points = camera.children[0];
@@ -280,7 +284,7 @@ function renderPointCloud(camera) {
 		if (y % DOWNSCALE_FACTOR != 0) continue;
 		for (let x = 0; x < numCols; x++) {
 			if (x % DOWNSCALE_FACTOR != 0) continue;
-			let d = spec.depthImage[numCols * y + x] / 1000; // mm to m.
+			let d = 0.001 * spec.depthImage[numCols * y + x]; // mm to m.
 			if (isNaN(d) || d <= 0) continue;
 			buffer[3 * idx + 0] = d * (x - K[0][2]) / K[0][0];
 			buffer[3 * idx + 1] = d * ((numRows - y) - K[1][2]) / K[1][1];
