@@ -16,6 +16,7 @@ export function create(model, loadCallback) {
 			key_image: model.key_image,
 			key_segmentation: model.key_segmentations[i],
 			idx_segmentation: i,
+			num_segmentations: model.key_segmentations.length,
 		});
 	}
 	let image = {
@@ -36,7 +37,8 @@ function htmlCanvas(key) {
 }
 
 function addCanvas(image_or_camera) {
-	const model = image_or_camera.model;
+	const model = image_or_camera.model || image_or_camera;
+	const num_segmentations = ("segmentations" in image_or_camera) ? image_or_camera.segmentations.length : image_or_camera.num_segmentations;
 	const key = model.key_image || model.key_color_image
 	let $a = $(htmlCanvas(key));
 	$("#sidebar-images").append($a);
@@ -45,8 +47,8 @@ function addCanvas(image_or_camera) {
 	let canvas = $canvas[0];
 	canvas.raw_img = document.createElement("canvas");
 	canvas.raw_segmentations = []
-	if ("segmentations" in image_or_camera) {
-		for (let i = 0; i < image_or_camera.segmentations.length; i++) {
+	if (num_segmentations !== undefined) {
+		for (let i = 0; i < num_segmentations; i++) {
 			canvas.raw_segmentations.push(document.createElement("canvas"));
 		}
 	}
@@ -115,7 +117,7 @@ function hsv2rgb(h, s, v) {
 }
 
 function generateRandomColor(seed) {
-	const rng = random(seed);
+	const rng = random(10000 * seed);
 	return hsv2rgb(360 * rng(), 0.8 * rng() + 0.2, 1.0);
 }
 
@@ -135,7 +137,7 @@ export function renderImageSegmentation(segmentation_model, image_buffer, dim) {
 		rgba_buffer[i + 0] = mask * c[0];
 		rgba_buffer[i + 1] = mask * c[1];
 		rgba_buffer[i + 2] = mask * c[2];
-		rgba_buffer[i + 3] = 0.8 * mask;
+		rgba_buffer[i + 3] = 0.4 * mask;
 	}
 	let img_data = new ImageData(rgba_buffer, dim[1], dim[0]);
 	let raw_segmentation = canvas.raw_segmentations[segmentation_model.idx_segmentation];
@@ -149,8 +151,8 @@ var updatingImage = false;
 
 export function updateImage(image, opencv_mat, renderCallback) {
 	if (opencv_mat.constructor !== ArrayBuffer) return false;
-	if (updatingImage) return false;
-	updatingImage = true;
+	// if (updatingImage) return false;
+	// updatingImage = true;
 	const [promise_img, dim] = Camera.parseOpenCvMat(opencv_mat);
 	promise_img.then((img) => {
 		renderImage(image, img, dim);

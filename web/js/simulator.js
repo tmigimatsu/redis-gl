@@ -251,6 +251,7 @@ $(document).ready(function() {
 		for (let i = 0; i < model.key_segmentations.length; i++) {
 			registerRedisUpdateCallback(model.key_segmentations[i], key, images[key].segmentations[i], ImageView.updateImageSegmentation);
 		}
+		console.log("New image: " + key, model["key_image"]);
 		return true;
 	}
 
@@ -301,7 +302,6 @@ $(document).ready(function() {
 			// Call update event
 			if (key in redisUpdateCallbacks) {
 				for (const keyComponent in redisUpdateCallbacks[key]) {
-					// console.log(key, keyComponent);
 					const updateCallback = redisUpdateCallbacks[key][keyComponent];
 					renderFrame = updateCallback(val) || renderFrame;
 				}
