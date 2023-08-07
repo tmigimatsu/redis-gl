@@ -7,21 +7,12 @@
  * Authors: Toki Migimatsu
  */
 
-import * as Camera from "./camera.js"
+import * as Redis from "./redis.js"
 
-export function create(model, loadCallback) {
-	let segmentations = [];
-	for (let i = 0; i < model.key_segmentations.length; i++) {
-		segmentations.push({
-			key_image: model.key_image,
-			key_segmentation: model.key_segmentations[i],
-			idx_segmentation: i,
-			num_segmentations: model.key_segmentations.length,
-		});
-	}
-	let image = {
+export function create(model_key, model, loadCallback) {
+	const image = {
 		model: model,
-		segmentations: segmentations,
+		model_key: model_key,
 	};
 	return image;
 }
@@ -36,10 +27,7 @@ function htmlCanvas(key) {
 	return canvas;
 }
 
-function addCanvas(image_or_camera) {
-	const model = image_or_camera.model || image_or_camera;
-	const num_segmentations = ("segmentations" in image_or_camera) ? image_or_camera.segmentations.length : image_or_camera.num_segmentations;
-	const key = model.key_image || model.key_color_image
+function addCanvas(key) {
 	let $a = $(htmlCanvas(key));
 	$("#sidebar-images").append($a);
 
@@ -47,11 +35,8 @@ function addCanvas(image_or_camera) {
 	let canvas = $canvas[0];
 	canvas.raw_img = document.createElement("canvas");
 	canvas.raw_segmentations = []
-	if (num_segmentations !== undefined) {
-		for (let i = 0; i < num_segmentations; i++) {
-			canvas.raw_segmentations.push(document.createElement("canvas"));
-		}
-	}
+	canvas.num_segmentations = 0;
+	canvas.segmentation_areas = [];
 	return $canvas;
 }
 
@@ -62,35 +47,56 @@ function getCanvas(key) {
 export function drawImage(canvas) {
 	let ctx = canvas.getContext("2d");
 	ctx.drawImage(canvas.raw_img, 0, 0, canvas.width, canvas.height);
-	for (let i = 0; i < canvas.raw_segmentations.length; i++) {
-		ctx.drawImage(canvas.raw_segmentations[i], 0, 0, canvas.width, canvas.height);
+
+	const segmentation_areas = canvas.segmentation_areas.slice(0, 1 + canvas.num_segmentations);
+	const idx_sorted = segmentation_areas
+		.map((area, idx) => [area, idx])
+		.sort((area_idx_a, area_idx_b) => area_idx_b[0] - area_idx_a[0])  // Sort areas in descending order.
+		.map(area_idx => area_idx[1]);
+	for (const idx_seg of idx_sorted) {
+		ctx.drawImage(canvas.raw_segmentations[idx_seg], 0, 0, canvas.width, canvas.height);
 	}
 }
 
-export function renderImage(image, image_buffer, dim) {
-	let $canvas = getCanvas(image.model.key_image || image.model.key_color_image);
-	if ($canvas.length === 0) {
-		$canvas = addCanvas(image);
+
+function buffer2rgba(image_buffer, dim) {
+	if (dim[2] == 4) return image_buffer;
+
+	let orig_image_buffer = image_buffer;
+	image_buffer = new Uint8ClampedArray(4 * orig_image_buffer.length / dim[2]);
+	for (let i = 0; i < orig_image_buffer.length / dim[2]; i++) {
+		if (dim[2] == 3) {
+			image_buffer[4 * i] = orig_image_buffer[dim[2] * i];
+			image_buffer[4 * i + 1] = orig_image_buffer[dim[2] * i + 1];
+			image_buffer[4 * i + 2] = orig_image_buffer[dim[2] * i + 2];
+		} else if (orig_image_buffer instanceof Float32Array || orig_image_buffer instanceof Uint16Array) {
+			const d = 0.1 * orig_image_buffer[dim[2] * i];
+			image_buffer[4 * i] = d;
+			image_buffer[4 * i + 1] = d;
+			image_buffer[4 * i + 2] = d;
+		} else {
+			const v = orig_image_buffer[dim[2] * i];
+			image_buffer[4 * i] = v;
+			image_buffer[4 * i + 1] = v;
+			image_buffer[4 * i + 2] = v;
+		}
+		image_buffer[4 * i + 3] = 255;
 	}
 
-	let canvas = $canvas[0];
+	return image_buffer;
+}
+
+export function renderImage(image_name, image_buffer, dim) {
+	let $canvas = getCanvas(image_name);
+	if ($canvas.length === 0) {
+		$canvas = addCanvas(image_name);
+	}
+
+	const canvas = $canvas[0];
 	canvas.height = canvas.width * dim[0] / dim[1];
 
-	if (image_buffer instanceof Float32Array) {
-		let float_image_buffer = image_buffer;
-		image_buffer = new Uint8ClampedArray(4 * float_image_buffer.length);
-		for (let y = 0; y < dim[0]; y++) {
-			for (let x = 0; x < dim[1]; x++) {
-				const d = 0.1 * float_image_buffer[dim[1] * (dim[0] - y) + x];
-				const i = dim[1] * y + x
-				image_buffer[4 * i] = d;
-				image_buffer[4 * i + 1] = d;
-				image_buffer[4 * i + 2] = d;
-				image_buffer[4 * i + 3] = 255;
-			}
-		}
-	}
-	let img_data = new ImageData(image_buffer, dim[1], dim[0]);
+	image_buffer = buffer2rgba(image_buffer, dim);
+	const img_data = new ImageData(image_buffer, dim[1], dim[0]);
 	canvas.raw_img.width = dim[1];
 	canvas.raw_img.height = dim[0];
 	canvas.raw_img.getContext("2d").putImageData(img_data, 0, 0);
@@ -118,60 +124,66 @@ function hsv2rgb(h, s, v) {
 
 function generateRandomColor(seed) {
 	const rng = random(10000 * seed);
-	return hsv2rgb(360 * rng(), 0.8 * rng() + 0.2, 1.0);
+	return hsv2rgb(103 * seed % 360, 0.2 + 0.8 * rng(), 0.9 + 0.1 * rng());
 }
 
-export function renderImageSegmentation(segmentation_model, image_buffer, dim) {
-	let $canvas = getCanvas(segmentation_model.key_image);
+export function renderImageSegmentation(segmentation_model, image_buffer, shape) {
+	if (shape.length === 2) {
+		shape = [1, shape[0], shape[1]];
+	}
+
+	let $canvas = getCanvas(segmentation_model.model_key);
 	if ($canvas.length === 0) {
-		$canvas = addCanvas(segmentation_model);
+		$canvas = addCanvas(segmentation_model.model_key);
+	}
+	const canvas = $canvas[0];
+	canvas.num_segmentations = shape[0];
+	for (let i = canvas.raw_segmentations.length; i < shape[0]; i++) {
+		canvas.raw_segmentations.push(document.createElement("canvas"));
+		canvas.segmentation_areas.push(0);
+	}
+	canvas.height = canvas.width * shape[1] / shape[2];
+
+	const len_seg = shape[1] * shape[2];
+	for (let idx_seg = 0; idx_seg < shape[0]; idx_seg++) {
+		const c = generateRandomColor(idx_seg);
+		const rgba_buffer = new Uint8ClampedArray(4 * len_seg);
+		let seg_area = 0;
+		for (let i = 0; i < len_seg; i++) {
+			const val = image_buffer[idx_seg * len_seg + i] > 0;
+			const mask = 255 * val;
+			rgba_buffer[4 * i + 0] = mask * c[0];
+			rgba_buffer[4 * i + 1] = mask * c[1];
+			rgba_buffer[4 * i + 2] = mask * c[2];
+			rgba_buffer[4 * i + 3] = 0.8 * mask;
+			seg_area += val;
+		}
+		canvas.segmentation_areas[idx_seg] = seg_area;
+		const img_data = new ImageData(rgba_buffer, shape[2], shape[1]);
+		const raw_segmentation = canvas.raw_segmentations[idx_seg];
+		raw_segmentation.width = shape[2];
+		raw_segmentation.height = shape[1];
+		raw_segmentation.getContext("2d").putImageData(img_data, 0, 0);
 	}
 
-	let canvas = $canvas[0];
-	canvas.height = canvas.width * dim[0] / dim[1];
-
-	let rgba_buffer = new Uint8ClampedArray(image_buffer.length);
-	const c = generateRandomColor(segmentation_model.idx_segmentation);
-	for (let i = 0; i < image_buffer.length; i += 4) {
-		const mask = 255 * (image_buffer[i] > 0);
-		rgba_buffer[i + 0] = mask * c[0];
-		rgba_buffer[i + 1] = mask * c[1];
-		rgba_buffer[i + 2] = mask * c[2];
-		rgba_buffer[i + 3] = 0.4 * mask;
-	}
-	let img_data = new ImageData(rgba_buffer, dim[1], dim[0]);
-	let raw_segmentation = canvas.raw_segmentations[segmentation_model.idx_segmentation];
-	raw_segmentation.width = dim[1];
-	raw_segmentation.height = dim[0];
-	raw_segmentation.getContext("2d").putImageData(img_data, 0, 0);
 	drawImage(canvas);
 }
 
-var updatingImage = false;
-
-export function updateImage(image, opencv_mat, renderCallback) {
-	if (opencv_mat.constructor !== ArrayBuffer) return false;
-	// if (updatingImage) return false;
-	// updatingImage = true;
-	const [promise_img, dim] = Camera.parseOpenCvMat(opencv_mat);
-	promise_img.then((img) => {
-		renderImage(image, img, dim);
-
-		updatingImage = false;
+export function updateImage(image, array_buffer, renderCallback) {
+	if (array_buffer.constructor !== ArrayBuffer) return false;
+	Redis.parseImageOrTensor(array_buffer).then((result) => {
+		const [img, shape] = result;
+		renderImage(image.model_key, img, shape);
 	});
 	return false;
 }
 
 
-export function updateImageSegmentation(segmentation_model, opencv_mat, renderCallback) {
-	if (opencv_mat.constructor !== ArrayBuffer) return false;
-	// if (updatingImage) return false;
-	// updatingImage = true;
-	const [promise_img, dim] = Camera.parseOpenCvMat(opencv_mat);
-	promise_img.then((img) => {
-		renderImageSegmentation(segmentation_model, img, dim);
-
-		updatingImage = false;
+export function updateImageSegmentation(image, array_buffer, renderCallback) {
+	if (array_buffer.constructor !== ArrayBuffer) return false;
+	Redis.parseImageOrTensor(array_buffer).then((result) => {
+		const [img, shape] = result;
+		renderImageSegmentation(image, img, shape);
 	});
 	return false;
 }

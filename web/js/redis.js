@@ -316,3 +316,186 @@ export function parseMessage(buffer) {
 		toDelete: deleteKeys
 	};
 }
+
+let CV_TYPES = {
+	"0": "CV_8UC1",
+	"8": "CV_8UC2",
+	"16": "CV_8UC3",
+	"24": "CV_8UC4",
+	"2": "CV_16UC1",
+	"10": "CV_16UC2",
+	"18": "CV_16UC3",
+	"26": "CV_16UC4",
+	"5": "CV_32FC1",
+	"13": "CV_32FC2",
+	"11": "CV_32FC3",
+	"29": "CV_32FC4",
+}
+
+export function bufferToHex(buffer) {
+	function convert(b) {
+		if (32 <= b && b < 128) {
+			return String.fromCharCode(b);
+		} else {
+			return "\\x" + b.toString(16).padStart(2, "0");
+		}
+	}
+	return [...new Uint8Array(buffer)].map(convert).join("")
+}
+
+function getWord(data_view, idx) {
+	let chars = [];
+	while (idx < data_view.byteLength) {
+		const char = String.fromCharCode(data_view.getUint8(idx++));
+		if (char == " ") break;
+		chars.push(char);
+	}
+	const word = chars.join("");
+
+	return [word, idx];
+}
+
+function getImageType(data_view, idx) {
+	let word;
+	[word, idx] = getWord(data_view, idx);
+	const type = word == "(" ? "tensor" : CV_TYPES[word];
+
+	return [type, idx];
+}
+
+function getTensorShape(data_view, idx) {
+	let shape = [];
+	var word;
+	while (idx < data_view.byteLength) {
+		[word, idx] = getWord(data_view, idx);
+		if (word == ")") break;
+		shape.push(parseInt(word));
+	}
+
+	return [shape, idx];
+}
+
+export function parseImageOrTensor(array_buffer) {
+	const data_view = new DataView(array_buffer);
+
+	// Parse opencv_mat message
+	let [type, idx] = getImageType(data_view, 0);
+
+	if (type.startsWith("CV_32FC")) {
+		// Parse size.
+		idx = getWord(data_view, idx)[1];
+		const buffer_exr = array_buffer.slice(idx);
+
+		const exr_loader = new THREE.EXRLoader();
+		const exr = exr_loader.parse(buffer_exr);
+
+		const len_row = exr.data.length / exr.height;
+		const num_channels = len_row / exr.width;
+		const shape = [exr.height, exr.width, num_channels];
+
+		// EXR loader loads the image with the y-axis flipped.
+		const img = new Float32Array(exr.data.length);
+		for (let y = 0; y < exr.height; y++) {
+			const idx_src = len_row * (exr.height - 1 - y);
+			const idx_dest = len_row * y;
+			const img_row = exr.data.subarray(idx_src, idx_src + len_row);
+			img.set(img_row, idx_dest);
+		}
+
+		return new Promise((resolve, reject) => {
+			resolve([img, shape]);
+		});
+	} else if (type.startsWith("CV_")) {
+		// Parse size.
+		idx = getWord(data_view, idx)[1];
+		const buffer_fast_png = new Uint8Array(array_buffer, idx);
+		const png = FastPng.decode(buffer_fast_png);
+		const shape = [png.height, png.width, png.channels];
+
+		return new Promise((resolve, reject) => {
+			resolve([png.data, shape]);
+		});
+		// const dv = new DataView(opencv_mat);
+		// numCols = dv.getUint32(idx_buffer_prefix + 16);
+		// numRows = dv.getUint32(idx_buffer_prefix + 20);
+		// numChannels = 4;
+		//
+		// let buffer_png = buffer_prefix.subarray(idx_buffer_prefix);
+		// let png_data = "";
+		// for (let i = 0; i < buffer_png.byteLength; i++) {
+		// 	png_data += String.fromCharCode(buffer_png[i]);
+		// }
+		//
+		// promise_img = new Promise((resolve, reject) => {
+		// 	let image = new Image(numCols, numRows);
+		// 	image.onload = () => {
+		// 		let canvas = document.createElement("canvas");
+		// 		canvas.width = image.width;
+		// 		canvas.height = image.height;
+		// 		let ctx = canvas.getContext("2d");
+		// 		ctx.drawImage(image, 0, 0);
+		// 		const img_data = ctx.getImageData(0, 0, image.width, image.height);
+		// 		resolve(img_data.data);
+		// 	}
+		// 	image.src = "data:image/png;base64," + window.btoa(png_data);
+		// });
+	} else if (type == "tensor") {
+		let shape, dtype, cls, element_size;
+		[shape, idx] = getTensorShape(data_view, idx);
+		[dtype, idx] = getWord(data_view, idx);
+
+		let img;
+		if (dtype == "bool") {
+			// Unpack bits.
+			img = new Uint8Array(shape.reduce((a, b) => a * b, 1));
+			for (let idx_byte = 0; idx_byte < data_view.byteLength - idx; idx_byte++) {
+				const byte = data_view.getUint8(idx + idx_byte);
+				for (let idx_bit = 0; idx_bit < 8; idx_bit++) {
+					const bit = (byte >> (7 - idx_bit)) & 0x01;
+					img[idx_byte * 8 + idx_bit] = bit;
+				}
+			}
+		} else {
+			switch (dtype) {
+				case "uint8":
+					cls = Uint8Array;
+					element_size = 1;
+					break;
+				case "int8":
+					cls = Int8Array;
+					element_size = 1;
+					break;
+				case "uint16":
+					cls = Uint16Array;
+					element_size = 2;
+					break;
+				case "int16":
+					cls = Int16Array;
+					element_size = 2;
+					break;
+				case "int32":
+					cls = Int32Array;
+					element_size = 4;
+					break;
+				case "float32":
+					cls = Float32Array;
+					element_size = 4;
+					break;
+				case "float64":
+					cls = Float64Array;
+					element_size = 8;
+					break;
+				default:
+					throw new Error("Unsupported dtype " + dtype);
+			}
+			img = (idx % element_size == 0) ? new cls(array_buffer, idx) : new cls(array_buffer.slice(idx));
+		}
+
+		return new Promise((resolve, reject) => {
+			resolve([img, shape]);
+		});
+	}
+
+	// Returns a promise because png loading isn't synchronous.
+	return promise_img;
+}

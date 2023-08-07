@@ -11,7 +11,7 @@ import * as Redis from "./redis.js"
 
 var LEN_TRAJECTORY_TRAIL = 500;
 
-export function create(model, loadCallback) {
+export function create(model_key, model, loadCallback) {
 	let traj = new THREE.Object3D();
 	traj.redisgl = {
 		idx: 0,

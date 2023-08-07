@@ -10,9 +10,7 @@
 import * as Redis from "./redis.js"
 import * as ImageView from "./image.js"
 
-let DOWNSCALE_FACTOR = 1;
-
-export function create(model, loadCallback) {
+export function create(model_key, model, loadCallback) {
 	let camera = new THREE.Object3D();
 
 	// Create point cloud
@@ -44,6 +42,7 @@ export function create(model, loadCallback) {
 		colorDim: [0, 0, 0],
 		intrinsic: null,
 		model: model,
+		model_key: model_key,
 	};
 
 	loadCallback(camera);
@@ -67,142 +66,20 @@ export function updateOrientation(camera, val) {
 	return true;
 }
 
-let CV_TYPES = {
-	"0": "CV_8UC1",
-	"8": "CV_8UC2",
-	"16": "CV_8UC3",
-	"24": "CV_8UC4",
-	"2": "CV_16UC1",
-	"10": "CV_16UC2",
-	"18": "CV_16UC3",
-	"26": "CV_16UC4",
-	"5": "CV_32FC1",
-	"13": "CV_32FC2",
-	"11": "CV_32FC3",
-	"29": "CV_32FC4",
-}
-
-function getOpenCvType(buffer) {
-	let word = "";
-	let idx = 0;
-	let char = String.fromCharCode(buffer[idx++]);
-	while (idx < buffer.length && char != " ") {
-		word += char;
-		char = String.fromCharCode(buffer[idx++]);
-	}
-	if (!(word in CV_TYPES)) return ["custom", idx];
-	const type = CV_TYPES[word];
-	return [type, idx];
-}
-
-function getBufferSize(buffer, idx) {
-	let word = "";
-	let char = String.fromCharCode(buffer[idx++]);
-	while (char != " ") {
-		word += char;
-		char = String.fromCharCode(buffer[idx++]);
-	}
-	const size = parseInt(word);
-	return [size, idx];
-}
-
-export function parseOpenCvMat(opencv_mat) {
-	// Parse opencv_mat message
-	let buffer_prefix = new Uint8Array(opencv_mat);
-	let [type, idx_buffer_prefix] = getOpenCvType(buffer_prefix);
-
-	let promise_img = null;
-	let numRows = 0;
-	let numCols = 0;
-	let numChannels = 0;
-	if (type.includes("CV_32FC")) {
-		idx_buffer_prefix = getBufferSize(buffer_prefix, idx_buffer_prefix)[1];
-		let buffer_exr = opencv_mat.slice(idx_buffer_prefix);
-
-		let exr_loader = new THREE.EXRLoader();
-		let exr = exr_loader.parse(buffer_exr);
-
-		let img = exr.data;
-		numRows = exr.height;
-		numCols = exr.width;
-		numChannels = img.length / (numRows * numCols);
-
-		promise_img = new Promise((resolve, reject) => { resolve(exr.data); });
-	} else if (type.includes("CV_")) {
-		idx_buffer_prefix = getBufferSize(buffer_prefix, idx_buffer_prefix)[1];
-		const dv = new DataView(opencv_mat);
-		numCols = dv.getUint32(idx_buffer_prefix + 16);
-		numRows = dv.getUint32(idx_buffer_prefix + 20);
-		numChannels = 4;
-
-		let buffer_png = buffer_prefix.subarray(idx_buffer_prefix);
-		let png_data = "";
-		for (let i = 0; i < buffer_png.byteLength; i++) {
-			png_data += String.fromCharCode(buffer_png[i]);
-		}
-
-		promise_img = new Promise((resolve, reject) => {
-			let image = new Image(numCols, numRows);
-			image.onload = () => {
-				let canvas = document.createElement("canvas");
-				canvas.width = image.width;
-				canvas.height = image.height;
-				let ctx = canvas.getContext("2d");
-				ctx.drawImage(image, 0, 0);
-				const img_data = ctx.getImageData(0, 0, image.width, image.height);
-				resolve(img_data.data);
-			}
-			image.src = "data:image/png;base64," + window.btoa(png_data);
-		});
-	} else if (type == "custom") {
-		// Custom format.
-		let buffer = opencv_mat.slice(idx_buffer_prefix);
-		let dimOpenCv = [];
-		let idx = 0;
-		while (idx < buffer.length && dimOpenCv.length < 3) {
-			let word = "";
-			let char = String.fromCharCode(buffer[idx++]);
-			while (char != " ") {
-				word += char;
-				char = String.fromCharCode(buffer[idx++]);
-			}
-			dimOpenCv.push(parseInt(word));
-		}
-		let img;
-		switch (dimOpenCv[2]) {
-			case 0: img = new Uint8Array(opencv_mat.subarray(idx)); break;
-			case 1: img = new Int8Array(opencv_mat.subarray(idx)); break;
-			case 2: img = new Uint16Array(opencv_mat.subarray(idx)); break;
-			case 3: img = new Int16Array(opencv_mat.subarray(idx)); break;
-			case 4: img = new Int32Array(opencv_mat.subarray(idx)); break;
-			case 5: img = new Float32Array(opencv_mat.subarray(idx)); break;
-			case 6: img = new Float64Array(opencv_mat.subarray(idx)); break;
-		}
-		numRows = dimOpenCv[0];
-		numCols = dimOpenCv[1];
-		numChannels = img.length / (dimOpenCv[0] * dimOpenCv[1]);
-
-		promise_img = new Promise((resolve, reject) => { resolve(img); });
-	}
-
-	// Returns a promise because png loading isn't synchronous.
-	return [promise_img, [numRows, numCols, numChannels]];
-}
-
 var updatingDepth = false;
 
 export function updateDepthImage(camera, opencv_mat, renderCallback) {
 	if (opencv_mat.constructor !== ArrayBuffer) return false;
 	if (updatingDepth) return false;
 	updatingDepth = true;
-	const [promise_img, dim] = parseOpenCvMat(opencv_mat);
-	promise_img.then((img) => {
+	Redis.parseImageOrTensor(opencv_mat).then((result) => {
+		const [img, shape] = result;
 		let spec = camera.redisgl;
 		if (spec.depthImage === null) {
 			// Create new buffer
 			let points = camera.children[0];
 			let geometry = points.geometry;
-			let len_buffer = 3 * img.length / (DOWNSCALE_FACTOR * DOWNSCALE_FACTOR);
+			let len_buffer = 3 * img.length / (spec.model.downscale_factor * spec.model.downscale_factor);
 			let buffer = new Float32Array(len_buffer);
 			geometry.setAttribute("position", new THREE.Float32BufferAttribute(buffer, 3));
 			geometry.attributes.position.dynamic = true;
@@ -217,10 +94,11 @@ export function updateDepthImage(camera, opencv_mat, renderCallback) {
 
 		// Update specs
 		spec.depthImage = img;
-		spec.depthDim = dim;
+		spec.depthDim = shape;
 
 		renderCameraViewFrame(camera);
 		renderPointCloud(camera);
+		ImageView.renderImage(camera.redisgl.model.key_depth_image, img, shape);
 		if (!updatingColor) {
 			renderCallback(() => {
 				updatingDepth = false;
@@ -238,11 +116,11 @@ export function updateColorImage(camera, opencv_mat, renderCallback) {
 	if (opencv_mat.constructor !== ArrayBuffer) return false;
 	if (updatingColor) return false;
 	updatingColor = true;
-	const [promise_img, dim] = parseOpenCvMat(opencv_mat);
-	promise_img.then((img) => {
+	Redis.parseImageOrTensor(opencv_mat).then((result) => {
+		const [img, shape] = result;
 		let spec = camera.redisgl;
 
-		ImageView.renderImage(camera.redisgl, img, dim);
+		ImageView.renderImage(camera.redisgl.model.key_color_image, img, shape);
 		// if (spec.colorImage === null && spec.depthImage === null) {
 		//   // Create new buffer
 		//   let points = camera.children[0];
@@ -254,7 +132,7 @@ export function updateColorImage(camera, opencv_mat, renderCallback) {
 
 		// Update specs
 		spec.colorImage = img;
-		spec.colorDim = dim;
+		spec.colorDim = shape;
 
 		renderPointCloud(camera);
 		if (!updatingDepth) {
@@ -281,13 +159,13 @@ function renderPointCloud(camera) {
 	// Update points
 	let idx = 0;
 	for (let y = 0; y < numRows; y++) {
-		if (y % DOWNSCALE_FACTOR != 0) continue;
+		if (y % spec.model.downscale_factor != 0) continue;
 		for (let x = 0; x < numCols; x++) {
-			if (x % DOWNSCALE_FACTOR != 0) continue;
+			if (x % spec.model.downscale_factor != 0) continue;
 			let d = 0.001 * spec.depthImage[numCols * y + x]; // mm to m.
 			if (isNaN(d) || d <= 0) continue;
 			buffer[3 * idx + 0] = d * (x - K[0][2]) / K[0][0];
-			buffer[3 * idx + 1] = d * ((numRows - y) - K[1][2]) / K[1][1];
+			buffer[3 * idx + 1] = d * (y - K[1][2]) / K[1][1];
 			buffer[3 * idx + 2] = d;
 			idx++;
 		}
@@ -303,18 +181,18 @@ function renderPointCloud(camera) {
 	const numColorCols = spec.colorDim[1];
 	if (spec.colorImage === null || numColorRows != numRows || numColorCols != numCols) return true;
 
-	let colorBuffer = points.geometry.attributes.color.array;
+	const colorBuffer = points.geometry.attributes.color.array;
 	const numChannels = spec.colorDim[2];
 
 	// Update colors.
 	idx = 0;
 	for (let y = 0; y < numRows; y++) {
-		if (y % DOWNSCALE_FACTOR != 0) continue;
-		let idxRow = (numRows - y) * numCols * numChannels;
+		if (y % spec.model.downscale_factor != 0) continue;
+		let idxRow = y * numCols * numChannels;
 		for (let x = 0; x < numCols; x++) {
-			if (x % DOWNSCALE_FACTOR != 0) continue;
+			if (x % spec.model.downscale_factor != 0) continue;
 			let idxCol = x * numChannels;
-			let d = spec.depthImage[numCols * y + x] / 1000; // mm to m.
+			let d = spec.model.depth_units * spec.depthImage[numCols * y + x]; // mm to m.
 			if (isNaN(d) || d <= 0) continue;
 			for (let c = 0; c < 3; c++) {
 				colorBuffer[3 * idx + c] = spec.colorImage[idxRow + idxCol + c] / 255;

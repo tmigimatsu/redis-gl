@@ -163,6 +163,7 @@ class ModelKeys:
     key_trajectories_prefix: str
     key_cameras_prefix: str
     key_images_prefix: str
+    key_meshes_prefix: str
 
     def __init__(self, key_namespace: str):
         self.key_namespace = key_namespace
@@ -171,6 +172,7 @@ class ModelKeys:
         self.key_trajectories_prefix = key_namespace + "::model::trajectory::"
         self.key_cameras_prefix = key_namespace + "::model::camera::"
         self.key_images_prefix = key_namespace + "::model::image::"
+        self.key_meshes_prefix = key_namespace + "::model::mesh::"
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -179,6 +181,7 @@ class ModelKeys:
             "key_trajectories_prefix": self.key_trajectories_prefix,
             "key_cameras_prefix": self.key_cameras_prefix,
             "key_images_prefix": self.key_images_prefix,
+            "key_meshes_prefix": self.key_meshes_prefix,
         }
 
 
@@ -230,6 +233,8 @@ class CameraModel:
     key_intrinsic: str
     key_depth_image: str
     key_color_image: str
+    depth_units = 0.001
+    downscale_factor = 1
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -239,6 +244,8 @@ class CameraModel:
             "key_intrinsic": self.key_intrinsic,
             "key_depth_image": self.key_depth_image,
             "key_color_image": self.key_color_image,
+            "depth_units": self.depth_units,
+            "downscale_factor": self.downscale_factor,
         }
 
 
@@ -258,13 +265,37 @@ class TrajectoryModel:
 class ImageModel:
     name: str
     key_image: str
-    key_segmentations: tuple[str] = ()
+    key_segmentation: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "name": self.name,
             "key_image": self.key_image,
-            "key_segmentations": self.key_segmentations,
+            "key_segmentation": self.key_segmentation,
+        }
+
+
+@dataclasses.dataclass
+class MeshModel:
+    name: str
+    key_vertices: str  # float32 [N, 3].
+    key_normals: str  # Vertex normals: float32 [N, 3].
+    key_indices: str  # Face vertex indices: uint16 [M, 3].
+    key_pos: str
+    key_ori: str
+    max_num_vertices: int = 1000
+    max_num_triangles: int = 10000
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "key_vertices": self.key_vertices,
+            "key_normals": self.key_normals,
+            "key_indices": self.key_indices,
+            "key_pos": self.key_pos,
+            "key_ori": self.key_ori,
+            "max_num_vertices": self.max_num_vertices,
+            "max_num_triangles": self.max_num_triangles,
         }
 
 
@@ -450,3 +481,32 @@ def unregister_image(
         image: Image model.
     """
     redis.delete(model_keys.key_images_prefix + image.name)
+
+
+def register_mesh(
+    redis: ctrlutils.RedisClient, model_keys: ModelKeys, mesh: MeshModel
+) -> None:
+    """Registers a mesh with redisgl.
+
+    Args:
+        redis: Redis client.
+        model_keys: Redisgl app namespace.
+        mesh: Mesh model.
+    """
+    redis.set(
+        model_keys.key_meshes_prefix + mesh.name,
+        json.dumps(mesh.to_dict()),
+    )
+
+
+def unregister_mesh(
+    redis: ctrlutils.RedisClient, model_keys: ModelKeys, mesh: MeshModel
+) -> None:
+    """Unregisters a mesh with redisgl.
+
+    Args:
+        redis: Redis client.
+        model_keys: Redisgl app namespace.
+        mesh: Mesh model.
+    """
+    redis.delete(model_keys.key_meshes_prefix + mesh.name)

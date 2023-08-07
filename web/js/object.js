@@ -13,7 +13,7 @@ import * as Redis from "./redis.js"
 var AXIS_WIDTH = 0.005;
 var AXIS_SIZE = 0.1;
 
-export function create(model, loadCallback) {
+export function create(model_key, model, loadCallback) {
 	// Create object
 	let object = new THREE.Object3D();
 

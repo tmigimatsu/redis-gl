@@ -9,6 +9,7 @@ import * as Camera from "./camera.js"
 import * as Graphics from "./graphics.js"
 import * as GraphicsObject from "./object.js"
 import * as ImageView from "./image.js"
+import * as Mesh from "./mesh.js"
 import * as Redis from "./redis.js"
 import * as Robot from "./robot.js"
 import * as Trajectory from "./trajectory.js"
@@ -56,6 +57,7 @@ $(document).ready(function() {
 	let trajectories = {};
 	let cameras = {};
 	let images = {};
+	let meshes = {};
 
 	initGraphics();
 
@@ -136,6 +138,8 @@ $(document).ready(function() {
 					parseModelFunction = parseTrajectoryModel;
 				} else if (key.startsWith(args[namespace]["key_images_prefix"])) {
 					parseModelFunction = parseImageModel;
+				} else if (key.startsWith(args[namespace]["key_meshes_prefix"])) {
+					parseModelFunction = parseMeshModel;
 				} else {
 					return;
 				}
@@ -158,7 +162,8 @@ $(document).ready(function() {
 					!parseObjectModel(key, val) &&
 					!parseRobotModel(key, val) &&
 					!parseTrajectoryModel(key, val) &&
-					!parseImageModel(key, val)) continue;
+					!parseImageModel(key, val) &&
+					!parseMeshModel(key, val)) continue;
 			} catch (error) {
 				console.error(error);
 				console.error("Failed to parse model " + key + ":\n" + val);
@@ -248,10 +253,23 @@ $(document).ready(function() {
 		const model = JSON.parse(val);
 		addComponentToScene(ImageView, images, key, model);
 		registerRedisUpdateCallback(model["key_image"], key, images[key], ImageView.updateImage);
-		for (let i = 0; i < model.key_segmentations.length; i++) {
-			registerRedisUpdateCallback(model.key_segmentations[i], key, images[key].segmentations[i], ImageView.updateImageSegmentation);
-		}
+		registerRedisUpdateCallback(model["key_segmentation"], key, images[key], ImageView.updateImageSegmentation);
 		console.log("New image: " + key, model["key_image"]);
+		return true;
+	}
+
+	function parseMeshModel(key, val) {
+		if (!isModelKey(key, "key_meshes_prefix")) return false;
+
+		// Parse object model
+		const model = JSON.parse(val);
+		addComponentToScene(Mesh, meshes, key, model);
+		registerRedisUpdateCallback(model["key_vertices"], key, meshes[key], Mesh.updateMeshVertices);
+		registerRedisUpdateCallback(model["key_normals"], key, meshes[key], Mesh.updateMeshNormals);
+		registerRedisUpdateCallback(model["key_indices"], key, meshes[key], Mesh.updateMeshIndices);
+		registerRedisUpdateCallback(model["key_pos"], key, meshes[key], Mesh.updatePosition);
+		registerRedisUpdateCallback(model["key_ori"], key, meshes[key], Mesh.updateOrientation);
+		console.log("New mesh: " + key);
 		return true;
 	}
 
@@ -271,7 +289,7 @@ $(document).ready(function() {
 	}
 
 	function addComponentToScene(Component, components, key, model) {
-		let component = Component.create(model, (component) => {
+		let component = Component.create(key, model, (component) => {
 			if (!(key in components) || components[key] != component) return;
 			renderer.render(scene, camera);
 		});

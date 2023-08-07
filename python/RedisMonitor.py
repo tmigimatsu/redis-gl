@@ -93,12 +93,13 @@ class RedisMonitor:
                 return None
         self.message_last[key] = val
 
-        try:
-            # If the first element is a number, try converting all the elements to numbers
-            val = val.decode("utf-8")
-        except:
-            # Otherwise, leave it as a string
-            pass
+        if b"\x00" not in val:
+            try:
+                # If the first element is a number, try converting all the elements to numbers
+                val = val.decode("utf-8")
+            except UnicodeDecodeError:
+                # Otherwise, leave it as a string
+                pass
 
         return val
 
