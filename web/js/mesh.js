@@ -16,7 +16,9 @@ export function create(model_key, model, loadCallback) {
 	console.log(model_key, positions, normals, indices);
 	const geometry = new THREE.BufferGeometry();
 	geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-	geometry.setAttribute("normal", new THREE.BufferAttribute(normals, 3));
+	if (model.key_normals != "") {
+		geometry.setAttribute("normal", new THREE.BufferAttribute(normals, 3));
+	}
 	geometry.setIndex(indices);
 	geometry.setDrawRange(0, 0);
 	const material = new THREE.MeshNormalMaterial();
@@ -73,6 +75,9 @@ export function updateMeshIndices(mesh, opencv_mat, renderCallback) {
 		const indices = mesh.geometry.index;
 		indices.array.set(array);
 		mesh.geometry.setDrawRange(0, array.length);
+		if (mesh.redisgl.model.key_normals == "") {
+			mesh.geometry.computeVertexNormals();
+		}
 
 		indices.needsUpdate = true;
 		// mesh.geometry.getAttribute("position").needsUpdate = true;
